@@ -1,0 +1,111 @@
+name: Haftalık bülten
+
+on:
+  schedule:
+    # Her cuma 06:15 UTC = 09:15 TSİ (GitHub cron birkaç dakika gecikebilir; 10:00'a hazır olur)
+    - cron: "15 6 * * 5"
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Bülten tarihi (YYYY-AA-GG). Boş = bugün"
+        required: false
+      deploy_only:
+        description: "Bülten üretme, sadece paneli yeniden yayınla"
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths: ["docs/**", "!docs/data/**"]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: bulletin
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.event_name != 'push' && !inputs.deploy_only
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      OPENROUTER_MODELS: ${{ vars.OPENROUTER_MODELS }}
+      TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+      LLM_PROVIDER: ${{ vars.LLM_PROVIDER }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: LLM anahtarı kontrolü
+        run: |
+          if [ -z "$OPENROUTER_API_KEY$ANTHROPIC_API_KEY$CLAUDE_CODE_OAUTH_TOKEN$GEMINI_API_KEY" ]; then
+            echo "::error::LLM anahtarı yok. Settings > Secrets > Actions altına OPENROUTER_API_KEY ekleyin."
+            exit 1
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Claude Code CLI kur (abonelik tokenı varsa)
+        if: env.CLAUDE_CODE_OAUTH_TOKEN != ''
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Bülteni oluştur
+        run: python -m pipeline.build ${{ inputs.date && format('--date {0}', inputs.date) || '' }}
+
+      - name: Sonuçları kaydet
+        run: |
+          git config user.name "du0ks"
+          git config user.email "73953584+du0ks@users.noreply.github.com"
+          git add docs/data
+          git diff --cached --quiet || git commit -m "Bülten: $(date +%F)"
+          git push
+
+  deploy:
+    needs: build
+    if: always() && (needs.build.result == 'success' || needs.build.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  notify:
+    needs: [build, deploy]
+    if: always() && needs.build.result != 'skipped' && vars.NOTIFY_EMAIL != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: E-posta bildirimi
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ vars.SMTP_SERVER || 'smtp.gmail.com' }}
+          server_port: ${{ vars.SMTP_PORT || 465 }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          from: Bülten Botu <${{ secrets.SMTP_USERNAME }}>
+          to: ${{ vars.NOTIFY_EMAIL }}
+          subject: "Haftalık Dış Ticaret Bülteni taslağı ${{ needs.build.result == 'success' && 'hazır' || 'OLUŞTURULAMADI' }}"
+          body: |
+            Bu haftanın bülten taslağı ${{ needs.build.result == 'success' && 'hazır' || 'oluşturulurken hata oluştu' }}.
+
+            Panel: ${{ needs.deploy.outputs.page_url || format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}
+            Çalışma kaydı: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
