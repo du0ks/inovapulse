@@ -156,9 +156,16 @@ def check_event(o):
 
 
 def build_event(candidates, today):
+    # Arama özetlerinde tarih/saat çoğu zaman yok; ilk adayların sayfa metnini ekle
+    candidates = [dict(c) for c in candidates]
+    for c in candidates[:15]:
+        c["url"] = resolve_gnews(c["url"])
+        text = article_text(c["url"], 1500)
+        if len(text) > len(c.get("snippet") or ""):
+            c["snippet"] = text
     out = llm.ask_json(
         prompts.EVENT_SYSTEM,
-        prompts.EVENT_USER.format(today=today, candidates=fmt_candidates(candidates, 600)),
+        prompts.EVENT_USER.format(today=today, candidates=fmt_candidates(candidates, 1500)),
         max_tokens=8000,
         check=check_event,
     )

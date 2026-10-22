@@ -110,13 +110,16 @@ girişimcilik vb. alanlarda ÜCRETSİZ ve İLERİ TARİHLİ (bugünden sonra) bi
 Tercih: Ticaret Bakanlığı, TİM, TOBB, İhracatçı Birlikleri, Ticaret/Sanayi Odaları, KOSGEB,
 Kalkınma Ajansları, üniversiteler, teknoparklar. Tarih, saat, ücretsiz bilgisi ve kayıt linki
 metinde yoksa null bırak; uydurma.
+Tarihi geçmiş olduğu açıkça belli olan etkinlikleri seçme. Tarihi metinde yazmıyor ama etkinlik
+veya program güncel/başvuruya açık görünüyorsa yine seçebilirsin (date: null); editör teyit edecek.
+Genel kurs siteleri, ücretli sertifika programları ve konu dışı seminerleri seçme.
 
 Örnek açıklama: "Eğitim içeriğinde katılımcılara, iletişim becerileri kazandırmayı ve kurum içindeki
 verimlilik ile performansı artırmaya yönelik çözümler sunmayı hedefleyerek, ..."
 {STYLE}"""
 
 EVENT_USER = """Bugün: {today}.
-Bir ana etkinlik ve en fazla 4 alternatif seç. Uygun etkinlik yoksa "selected": null döndür.
+Bir ana etkinlik ve en fazla 4 alternatif seç. Uygun hiçbir aday yoksa "selected": null döndür.
 Yalnızca şu JSON'u döndür:
 {{"selected": {{"id": <aday id>, "title": "Etkinlik adı", "organizer": "...",
    "description": "2-3 cümlelik tanıtım", "date": "GG.AA.YYYY veya null", "time": "SS:SS-SS:SS veya null",
