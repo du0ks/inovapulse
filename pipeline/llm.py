@@ -13,8 +13,10 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 
+import json_repair
 import requests
 
 from . import config
@@ -82,28 +84,33 @@ def _claude_cli(system, user, max_tokens):
     return r.stdout
 
 
-def _openrouter(system, user, max_tokens):
-    """OpenRouter; ilk model hata verirse sıradakilere otomatik geçer (models listesi)."""
+def _openrouter_call(model, system, user, max_tokens):
     body = {
-        "models": config.OPENROUTER_MODELS[:3],
+        "model": model,
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
         "max_tokens": max_tokens,
+        "response_format": {"type": "json_object"},
+        # Düşünme adımı çıktı limitini tüketmesin
+        "reasoning": {"effort": "low", "exclude": True},
     }
     headers = {"Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}",
                "HTTP-Referer": "https://github.com/inovapulse", "X-Title": "InovaPulse Bulten"}
-    for attempt in range(5):
-        r = requests.post("https://openrouter.ai/api/v1/chat/completions", json=body,
-                          headers=headers, timeout=600)
-        data = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+    for attempt in range(3):
+        try:
+            r = requests.post("https://openrouter.ai/api/v1/chat/completions", json=body,
+                              headers=headers, timeout=600)
+            data = r.json()
+        except (requests.RequestException, ValueError) as ex:
+            r, data = None, {"error": str(ex)}
         text = ((data.get("choices") or [{}])[0].get("message") or {}).get("content")
-        if r.ok and text:
-            log(f"  OpenRouter modeli: {data.get('model')}")
+        if r is not None and r.ok and text:
             return text
-        if attempt < 4:
-            wait = 20 * (attempt + 1)
-            log(f"  OpenRouter {r.status_code} {str(data.get('error', ''))[:160]}; {wait}s sonra tekrar")
+        err = str(data.get("error", ""))[:160] or "boş yanıt"
+        if attempt < 2:
+            wait = 15 * (attempt + 1)
+            log(f"  {model}: {err}; {wait}s sonra tekrar")
             time.sleep(wait)
-    raise RuntimeError(f"OpenRouter yanıt vermedi: {r.status_code} {r.text[:300]}")
+    raise RuntimeError(f"{model}: {err}")
 
 
 def _gemini(system, user, max_tokens):
@@ -127,19 +134,57 @@ def _gemini(system, user, max_tokens):
     raise RuntimeError("Gemini yanıt vermedi")
 
 
-def ask_json(system, user, max_tokens=16000):
+used_models = set()
+_lock = threading.Lock()
+
+
+def _parse(text):
+    try:
+        return _extract_json(text)
+    except (json.JSONDecodeError, ValueError):
+        fixed = json_repair.loads(text)  # küçük biçim hatalarını onar
+        if not isinstance(fixed, (dict, list)) or not fixed:
+            raise ValueError("JSON ayrıştırılamadı")
+        return fixed
+
+
+def ask_json(system, user, max_tokens=16000, check=None):
+    """LLM'den JSON alır. check(obj) ValueError atarsa yanıt reddedilir ve
+    (OpenRouter'da) sıradaki model denenir."""
     p = provider()
-    fn = {"anthropic": _anthropic, "claude-cli": _claude_cli, "gemini": _gemini,
-          "openrouter": _openrouter}.get(p)
-    if not fn:
-        raise RuntimeError("LLM tanımlı değil (OPENROUTER_API_KEY, ANTHROPIC_API_KEY, "
-                           "CLAUDE_CODE_OAUTH_TOKEN veya GEMINI_API_KEY)")
-    last = None
-    for attempt in range(2):
-        text = fn(system, user, max_tokens)
+    if p == "openrouter":
+        attempts = [(m, lambda s, u, t, m=m: _openrouter_call(m, s, u, t))
+                    for m in config.OPENROUTER_MODELS]
+    else:
+        fn = {"anthropic": _anthropic, "claude-cli": _claude_cli, "gemini": _gemini}.get(p)
+        if not fn:
+            raise RuntimeError("LLM tanımlı değil (OPENROUTER_API_KEY, ANTHROPIC_API_KEY, "
+                               "CLAUDE_CODE_OAUTH_TOKEN veya GEMINI_API_KEY)")
+        attempts = [(model_name(), fn)] * 2
+    errors = []
+    for name, fn in attempts:
         try:
-            return _extract_json(text)
-        except json.JSONDecodeError as ex:
-            last = ex
-            log(f"  JSON ayrıştırılamadı, tekrar deneniyor ({ex})")
-    raise last
+            obj = _parse(fn(system, user, max_tokens))
+            if check:
+                check(obj)
+        except Exception as ex:
+            errors.append(f"{name}: {ex}")
+            log(f"  ✗ {name} kullanılamadı: {str(ex)[:160]}")
+            continue
+        with _lock:
+            used_models.add(name)
+        log(f"  ✓ yanıt: {name}")
+        return obj
+    raise RuntimeError("Hiçbir model geçerli yanıt vermedi: " + " | ".join(errors)[:600])
+
+
+TR_CHARS = re.compile(r"[ğışĞİŞçÇöÖüÜ]")
+
+
+def require_turkish(texts, min_ratio=0.8):
+    texts = [t for t in texts if t]
+    if not texts:
+        raise ValueError("boş içerik")
+    ok = sum(1 for t in texts if TR_CHARS.search(t))
+    if ok / len(texts) < min_ratio:
+        raise ValueError(f"metinler Türkçe değil ({ok}/{len(texts)})")

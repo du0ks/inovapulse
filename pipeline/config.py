@@ -29,15 +29,18 @@ if _env.exists():
 # (Claude API) veya "gemini". Boş bırakılırsa tanımlı anahtara göre otomatik seçilir.
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "").strip().lower()
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-opus-5-5")
-# OpenRouter: sırayla denenir. Ücretsiz modeller değişebilir: openrouter.ai/models?q=free
+# OpenRouter: sırayla denenir; yanıt geçersizse (bozuk JSON, Türkçe değil) sıradakine geçilir.
+# Ücretsiz modeller zamanla değişebilir: openrouter.ai/models?q=free
 OPENROUTER_MODELS = [m.strip() for m in (
     os.getenv("OPENROUTER_MODELS")
-    or "google/gemma-4-31b-it:free,nvidia/nemotron-3-ultra-550b-a55b:free,openrouter/free"
+    or "google/gemma-4-31b-it:free,nvidia/nemotron-3.5-super-vl:free,"
+       "nvidia/nemotron-3-super-120b-a12b:free,google/gemma-4-26b-a4b-it:free,"
+       "nvidia/nemotron-3-ultra-550b-a55b:free"
 ).split(",") if m.strip()]
 CLAUDE_CLI_MODEL = os.getenv("CLAUDE_CLI_MODEL", "claude-opus-5-5")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
 # Aynı anda kaç LLM isteği (Gemini ücretsiz katmanında dakika limiti düşük, 1-2 önerilir)
-LLM_PARALLEL = int(os.getenv("LLM_PARALLEL", "6"))
+LLM_PARALLEL = int(os.getenv("LLM_PARALLEL") or (2 if os.getenv("OPENROUTER_API_KEY") else 6))
 
 # --- RSS kaynakları (anahtar gerektirmez) -----------------------------------
 # (kaynak adı, url, bölge) bölge: "tr" | "intl"

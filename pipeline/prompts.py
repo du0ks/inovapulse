@@ -23,10 +23,14 @@ Seçim kuralları:
 5. Tekrar kontrolü: aynı gelişmenin farklı kaynaklardaki versiyonlarını TEK haber say; en güvenilir
    kaynağı seç, diğerlerini "alt_kaynaklar"a koy.
 6. Konu çeşitliliği: aynı konudan (ör. üç ayrı enflasyon haberi) birden fazla seçme.
+7. Bölüm ayrımı: "Yurt Dışındaki Gelişmeler" bölümüne Türkiye ile ilgili haber (TCMB, Türkiye'nin
+   ihracatı, Türkiye'nin anlaşmaları vb.) ALMA; bunlar Türkiye bölümüne aittir. "Türkiye'deki
+   Gelişmeler" bölümü ise Türkiye'yi doğrudan ilgilendiren haberlerden oluşur.
 
 {STYLE}
 
-Her özet 2-3 cümle, 40-70 kelime olsun. Yurt dışı haberlerini Türkçeye çevirerek özetle."""
+Her özet 2-3 cümle, 40-70 kelime olsun. Kaynak İngilizce olsa bile başlık ve özet MUTLAKA
+Türkçe olmalı."""
 
 NEWS_USER = """Bölüm: {section}
 Bugün: {today}. Kapsanan dönem: {since} - {today}.

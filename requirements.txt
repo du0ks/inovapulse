@@ -1,3 +1,4 @@
 requests>=2.31
 feedparser>=6.0
 anthropic>=0.70
+json-repair>=0.30

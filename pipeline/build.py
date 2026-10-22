@@ -51,12 +51,19 @@ def pick(items, idx):
 # --- Bölümler --------------------------------------------------------------
 
 def build_news(section, candidates, count, reserve, today, since):
+    def check(o):
+        items = o.get("items") or []
+        if len(items) < count // 2:
+            raise ValueError(f"yetersiz haber ({len(items)})")
+        llm.require_turkish([x.get("summary") for x in items] + [x.get("title") for x in items])
+
     out = llm.ask_json(
         prompts.NEWS_SYSTEM,
         prompts.NEWS_USER.format(
             section=section, today=today, since=since, count=count, reserve=reserve,
             candidates=fmt_candidates(candidates),
         ),
+        check=check,
     )
 
     def resolve(x):
@@ -99,7 +106,8 @@ def refine_news(sections):
             )
     if not blocks:
         return
-    out = llm.ask_json(prompts.REFINE_SYSTEM, prompts.REFINE_USER.format(items="\n\n".join(blocks)))
+    out = llm.ask_json(prompts.REFINE_SYSTEM, prompts.REFINE_USER.format(items="\n\n".join(blocks)),
+                       check=lambda o: llm.require_turkish([x.get("summary") for x in o.get("items", [])]))
     for x in out.get("items", []):
         it = refs.get(x.get("key"))
         if it and x.get("summary"):
@@ -108,7 +116,8 @@ def refine_news(sections):
 
 
 def build_wci(raw):
-    out = llm.ask_json(prompts.WCI_SYSTEM, prompts.WCI_USER.format(text=raw["text_en"]), max_tokens=4000)
+    out = llm.ask_json(prompts.WCI_SYSTEM, prompts.WCI_USER.format(text=raw["text_en"]), max_tokens=8000,
+                       check=lambda o: llm.require_turkish(o.get("paragraphs") or [], 1.0))
     return {
         **raw,
         "paragraphs": out.get("paragraphs", []),
@@ -130,7 +139,8 @@ def build_trade(candidates, today):
     out = llm.ask_json(
         prompts.TRADE_SYSTEM,
         prompts.TRADE_USER.format(today=today, candidates=fmt_candidates(candidates, 500)),
-        max_tokens=3000,
+        max_tokens=8000,
+        check=lambda o: llm.require_turkish([o.get("summary")]),
     )
     srcs = [pick(candidates, i) for i in out.pop("source_ids", []) or []]
     out["sources"] = [{"title": s["title"], "source": s["source"], "url": s["url"]} for s in srcs if s]
@@ -138,11 +148,19 @@ def build_trade(candidates, today):
     return out
 
 
+def check_event(o):
+    if "selected" not in o:
+        raise ValueError("'selected' alanı yok")
+    sel = [o["selected"]] if o.get("selected") else []
+    llm.require_turkish([x.get("description") for x in sel + (o.get("alternatives") or [])] or ["ş"])
+
+
 def build_event(candidates, today):
     out = llm.ask_json(
         prompts.EVENT_SYSTEM,
         prompts.EVENT_USER.format(today=today, candidates=fmt_candidates(candidates, 600)),
-        max_tokens=4000,
+        max_tokens=8000,
+        check=check_event,
     )
 
     def resolve(x):
@@ -164,8 +182,13 @@ def build_calendar(days, events):
         f"{e['date']} | {e['time']} | {e['country']} | {e['indicator']} | {e['priority']} | "
         f"{e['previous'] or '-'} | {e['consensus'] or '-'}" for e in short
     )
+    def check(o):
+        if len(o.get("days") or []) < 4:
+            raise ValueError("gün listesi eksik")
+        llm.require_turkish([d.get("text") for d in o["days"]], 0.5)
+
     out = llm.ask_json(prompts.CAL_SYSTEM, prompts.CAL_USER.format(days=", ".join(days), events=lines),
-                       max_tokens=3000)
+                       max_tokens=8000, check=check)
     for d in out.get("days", []):
         try:
             d["weekday"] = WEEKDAYS[date.fromisoformat(d["date"]).weekday()]
@@ -266,6 +289,8 @@ def run(today: date, use_llm=True):
     else:
         warnings.append("LLM anahtarı tanımlı değil: yalnızca ham adaylar üretildi.")
 
+    if llm.used_models:
+        bulletin["llm"] = f"{llm.provider()}: {', '.join(sorted(llm.used_models))}"
     for sec in ("tr_news", "intl_news"):
         for it in (bulletin.get(sec) or {}).get("items", []) + (bulletin.get(sec) or {}).get("reserve", []):
             it.pop("fulltext", None)
