@@ -124,7 +124,8 @@ def _gemini(system, user, max_tokens):
                              "maxOutputTokens": max(max_tokens, 32768)},
     }
     for attempt in range(4):
-        r = requests.post(url, params={"key": key}, json=body, timeout=300)
+        # Anahtar URL'de değil başlıkta: hata mesajlarına/loglara sızmasın
+        r = requests.post(url, headers={"x-goog-api-key": key}, json=body, timeout=300)
         if r.status_code in (429, 500, 503) and attempt < 3:
             wait = 30 * (attempt + 1)
             log(f"  Gemini {r.status_code}, {wait}s bekleniyor...")
