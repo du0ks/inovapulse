@@ -42,7 +42,7 @@ def provider():
 
 def model_name():
     return {"anthropic": config.ANTHROPIC_MODEL, "claude-cli": config.CLAUDE_CLI_MODEL,
-            "gemini": config.GEMINI_MODEL, "openrouter": config.OPENROUTER_MODELS[0]}.get(provider())
+            "gemini": config.GEMINI_MODELS[0], "openrouter": config.OPENROUTER_MODELS[0]}.get(provider())
 
 
 def _extract_json(text):
@@ -113,9 +113,16 @@ def _openrouter_call(model, system, user, max_tokens):
     raise RuntimeError(f"{model}: {err}")
 
 
-def _gemini(system, user, max_tokens):
+class QuotaExhausted(RuntimeError):
+    """Model/sağlayıcının günlük kotası doldu; bu çalıştırmada tekrar denenmez."""
+
+
+exhausted = set()
+
+
+def _gemini(model, system, user, max_tokens):
     key = os.environ["GEMINI_API_KEY"]
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{config.GEMINI_MODEL}:generateContent"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     body = {
         "systemInstruction": {"parts": [{"text": system}]},
         "contents": [{"role": "user", "parts": [{"text": user}]}],
@@ -123,18 +130,39 @@ def _gemini(system, user, max_tokens):
         "generationConfig": {"responseMimeType": "application/json",
                              "maxOutputTokens": max(max_tokens, 32768)},
     }
-    for attempt in range(4):
+    for attempt in range(3):
         # Anahtar URL'de değil başlıkta: hata mesajlarına/loglara sızmasın
         r = requests.post(url, headers={"x-goog-api-key": key}, json=body, timeout=300)
-        if r.status_code in (429, 500, 503) and attempt < 3:
+        if r.status_code == 429 and "PerDay" in r.text:
+            raise QuotaExhausted(f"{model}: günlük ücretsiz kota doldu")
+        if r.status_code in (429, 500, 503) and attempt < 2:
             wait = 30 * (attempt + 1)
-            log(f"  Gemini {r.status_code}, {wait}s bekleniyor...")
+            log(f"  {model} {r.status_code}, {wait}s bekleniyor...")
             time.sleep(wait)
             continue
-        r.raise_for_status()
+        if not r.ok:
+            raise RuntimeError(f"{model}: HTTP {r.status_code}")
         cand = r.json()["candidates"][0]
         return "".join(p.get("text", "") for p in cand["content"]["parts"])
-    raise RuntimeError("Gemini yanıt vermedi")
+    raise RuntimeError(f"{model}: yanıt vermedi")
+
+
+def _attempts():
+    """Denenecek (ad, fonksiyon) zinciri: seçili sağlayıcı önce, sonra anahtarı olan diğerleri."""
+    chains = {}
+    if os.getenv("GEMINI_API_KEY"):
+        chains["gemini"] = [(f"gemini:{m}", lambda s, u, t, m=m: _gemini(m, s, u, t))
+                            for m in config.GEMINI_MODELS]
+    if os.getenv("OPENROUTER_API_KEY"):
+        chains["openrouter"] = [(f"openrouter:{m}", lambda s, u, t, m=m: _openrouter_call(m, s, u, t))
+                                for m in config.OPENROUTER_MODELS]
+    if os.getenv("ANTHROPIC_API_KEY"):
+        chains["anthropic"] = [(f"anthropic:{config.ANTHROPIC_MODEL}", _anthropic)]
+    if os.getenv("CLAUDE_CODE_OAUTH_TOKEN") or (not chains and shutil.which("claude")):
+        chains["claude-cli"] = [(f"claude-cli:{config.CLAUDE_CLI_MODEL}", _claude_cli)]
+    first = provider()
+    order = [first] + [k for k in chains if k != first]
+    return [a for k in order for a in chains.get(k, [])]
 
 
 used_models = set()
@@ -152,24 +180,26 @@ def _parse(text):
 
 
 def ask_json(system, user, max_tokens=16000, check=None):
-    """LLM'den JSON alır. check(obj) ValueError atarsa yanıt reddedilir ve
-    (OpenRouter'da) sıradaki model denenir."""
-    p = provider()
-    if p == "openrouter":
-        attempts = [(m, lambda s, u, t, m=m: _openrouter_call(m, s, u, t))
-                    for m in config.OPENROUTER_MODELS]
-    else:
-        fn = {"anthropic": _anthropic, "claude-cli": _claude_cli, "gemini": _gemini}.get(p)
-        if not fn:
-            raise RuntimeError("LLM tanımlı değil (OPENROUTER_API_KEY, ANTHROPIC_API_KEY, "
-                               "CLAUDE_CODE_OAUTH_TOKEN veya GEMINI_API_KEY)")
-        attempts = [(model_name(), fn)] * 2
+    """LLM'den JSON alır. Yanıt alınamazsa veya check(obj) ValueError atarsa
+    zincirdeki sıradaki model/sağlayıcı denenir."""
+    attempts = _attempts()
+    if not attempts:
+        raise RuntimeError("LLM tanımlı değil (GEMINI_API_KEY, OPENROUTER_API_KEY, "
+                           "ANTHROPIC_API_KEY veya CLAUDE_CODE_OAUTH_TOKEN)")
     errors = []
     for name, fn in attempts:
+        if name in exhausted:
+            continue
         try:
             obj = _parse(fn(system, user, max_tokens))
             if check:
                 check(obj)
+        except QuotaExhausted as ex:
+            with _lock:
+                exhausted.add(name)
+            errors.append(str(ex))
+            log(f"  ✗ {ex}; sıradaki modele geçiliyor")
+            continue
         except Exception as ex:
             errors.append(f"{name}: {ex}")
             log(f"  ✗ {name} kullanılamadı: {str(ex)[:160]}")

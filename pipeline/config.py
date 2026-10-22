@@ -38,7 +38,10 @@ OPENROUTER_MODELS = [m.strip() for m in (
        "nvidia/nemotron-3-ultra-550b-a55b:free"
 ).split(",") if m.strip()]
 CLAUDE_CLI_MODEL = os.getenv("CLAUDE_CLI_MODEL", "claude-opus-5-5")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
+# Gemini: her modelin ayrı ücretsiz günlük kotası var; ilki dolarsa ikincisine geçilir
+GEMINI_MODELS = [m.strip() for m in (
+    os.getenv("GEMINI_MODELS") or "gemini-flash-latest,gemini-flash-lite-latest"
+).split(",") if m.strip()]
 # Aynı anda kaç LLM isteği (Gemini ücretsiz katmanında dakika limiti düşük, 1-2 önerilir)
 LLM_PARALLEL = int(os.getenv("LLM_PARALLEL") or (2 if os.getenv("OPENROUTER_API_KEY") else 6))
 

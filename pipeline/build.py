@@ -297,7 +297,8 @@ def run(today: date, use_llm=True):
         warnings.append("LLM anahtarı tanımlı değil: yalnızca ham adaylar üretildi.")
 
     if llm.used_models:
-        bulletin["llm"] = f"{llm.provider()}: {', '.join(sorted(llm.used_models))}"
+        bulletin["llm"] = ", ".join(sorted(llm.used_models))
+    keep_previous_sections(bulletin, warnings)
     for sec in ("tr_news", "intl_news"):
         for it in (bulletin.get(sec) or {}).get("items", []) + (bulletin.get(sec) or {}).get("reserve", []):
             it.pop("fulltext", None)
@@ -307,6 +308,28 @@ def run(today: date, use_llm=True):
     bulletin["warnings"] = warnings
     save(bulletin)
     return bulletin
+
+
+SECTIONS = {"tr_news": "Türkiye haberleri", "intl_news": "Yurt dışı haberleri",
+            "trade_data": "Dış ticaret verisi", "event": "Etkinlik", "next_week": "Gelecek hafta"}
+
+
+def keep_previous_sections(b, warnings):
+    """Aynı tarihli önceki taslakta başarılı olan bir bölüm bu çalıştırmada üretilemediyse
+    eskisini korur; böylece kota/ağ hatası iyi bir taslağın üzerine yazmaz."""
+    path = config.DATA_DIR / "bulletins" / f"{b['date']}.json"
+    if not path.exists():
+        return
+    old = json.loads(path.read_text())
+    for key, name in SECTIONS.items():
+        if not b.get(key) and old.get(key):
+            b[key] = old[key]
+            warnings.append(f"{name} bu çalıştırmada üretilemedi; önceki sürüm korundu.")
+    new_wci, old_wci = b.get("wci") or {}, old.get("wci") or {}
+    if (not new_wci.get("paragraphs") and old_wci.get("paragraphs")
+            and new_wci.get("assessment_date") in (None, old_wci.get("assessment_date"))):
+        b["wci"] = old_wci
+        warnings.append("WCI özeti bu çalıştırmada üretilemedi; önceki sürüm korundu.")
 
 
 def save(b):
@@ -339,8 +362,18 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--date", help="Bülten tarihi (YYYY-AA-GG), varsayılan bugün")
     ap.add_argument("--no-llm", action="store_true", help="Sadece veri topla, LLM çağırma")
+    ap.add_argument("--skip-if-fresh", type=float, metavar="SAAT",
+                    help="Bu tarih için son SAAT içinde sorunsuz taslak üretildiyse hiçbir şey yapma")
     a = ap.parse_args()
     today = date.fromisoformat(a.date) if a.date else datetime.now(TR_TZ).date()
+    if a.skip_if_fresh:
+        path = config.DATA_DIR / "bulletins" / f"{today.isoformat()}.json"
+        if path.exists():
+            old = json.loads(path.read_text())
+            age = datetime.now(TR_TZ) - datetime.fromisoformat(old["generated_at"])
+            if age < timedelta(hours=a.skip_if_fresh) and old.get("llm") and not old.get("warnings"):
+                log(f"{today} için {age.total_seconds() / 3600:.1f} saat önce sorunsuz taslak üretilmiş; atlanıyor.")
+                return
     b = run(today, use_llm=not a.no_llm)
     if b["warnings"]:
         log("Uyarılar:\n  - " + "\n  - ".join(b["warnings"]))

@@ -2,8 +2,9 @@ name: Haftalık bülten
 
 on:
   schedule:
-    # Her cuma 06:15 UTC = 09:15 TSİ (GitHub cron birkaç dakika gecikebilir; 10:00'a hazır olur)
-    - cron: "15 6 * * 5"
+    # Her cuma 03:30 UTC = 06:30 TSİ. GitHub cron bazen gecikir; bülten yine de 10:00'dan
+    # çok önce hazır olur. (Gemini ücretsiz kotası TSİ ~10:00'da sıfırlanır.)
+    - cron: "30 3 * * 5"
   workflow_dispatch:
     inputs:
       date:
@@ -61,7 +62,10 @@ jobs:
         run: npm install -g @anthropic-ai/claude-code
 
       - name: Bülteni oluştur
-        run: python -m pipeline.build ${{ inputs.date && format('--date {0}', inputs.date) || '' }}
+        run: >
+          python -m pipeline.build
+          ${{ inputs.date && format('--date {0}', inputs.date) || '' }}
+          ${{ github.event_name == 'schedule' && '--skip-if-fresh 12' || '' }}
 
       - name: Sonuçları kaydet
         run: |
