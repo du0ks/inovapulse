@@ -1,11 +1,40 @@
-// Bülten paneli: docs/data/*.json dosyalarını okur, düzenlemeyi ve kopyalamayı sağlar.
+// Bülten paneli: docs/data/*.json dosyalarını okur; düzenleme, kopyalama ve yazdırmayı sağlar.
 // Düzenlemeler yalnızca bu tarayıcıda (localStorage) saklanır.
 
 const $ = (s, el = document) => el.querySelector(s);
 const app = $("#app");
-let doc = null;       // ekranda gösterilen (düzenlenmiş) bülten
+let doc = null;        // ekranda gösterilen (düzenlenmiş) bülten
 let storeKey = null;
-let withSources = false;
+let history = [];
+let isLatest = true;
+
+// ---- ikonlar (Lucide çizgi ikonlarından) ---------------------------------
+
+const ICONS = {
+  copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  printer: '<path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>',
+  more: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+  up: '<path d="m18 15-6-6-6 6"/>',
+  down: '<path d="m6 9 6 6 6-6"/>',
+  x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  chevron: '<path d="m9 18 6-6-6-6"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  ext: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+};
+
+function icon(name) {
+  const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  s.setAttribute("viewBox", "0 0 24 24");
+  s.setAttribute("fill", "none");
+  s.setAttribute("stroke", "currentColor");
+  s.setAttribute("stroke-width", "2");
+  s.setAttribute("stroke-linecap", "round");
+  s.setAttribute("stroke-linejoin", "round");
+  s.setAttribute("aria-hidden", "true");
+  s.innerHTML = ICONS[name];
+  return s;
+}
 
 // ---- yardımcılar ----------------------------------------------------------
 
@@ -33,18 +62,30 @@ function safeUrl(u) {
 
 function link(u, text) {
   const s = safeUrl(u);
-  return s ? h("a", { href: s, target: "_blank", rel: "noopener noreferrer" }, text || s) : (text || "");
+  return s ? h("a", { href: s, target: "_blank", rel: "noopener noreferrer" }, text || host(s)) : (text || "");
 }
 
 function host(u) {
   try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; }
 }
 
-function save() {
-  try { localStorage.setItem(storeKey, JSON.stringify(doc)); } catch {}
+function sourceName(x) {
+  const s = x.source || "";
+  return s && s !== "Google News" ? s : host(x.url);
 }
 
-// Düzenlenebilir alan: obj[key] metnini günceller
+let saveTimer;
+function save() {
+  try { localStorage.setItem(storeKey, JSON.stringify(doc)); } catch {}
+  const el = $(".saved");
+  if (el) {
+    el.textContent = "Kaydedildi";
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => { el.textContent = "Değişiklikleriniz bu tarayıcıda otomatik kaydedilir."; }, 1500);
+  }
+}
+
+// Düzenlenebilir metin: obj[key] değerini günceller
 function editable(tag, obj, key, attrs = {}) {
   const el = h(tag, { ...attrs, contenteditable: "plaintext-only", spellcheck: "true" }, obj?.[key] ?? "");
   el.addEventListener("input", () => { obj[key] = el.innerText.trim(); save(); });
@@ -56,32 +97,42 @@ function toast(msg) {
   t.textContent = msg;
   t.classList.add("show");
   clearTimeout(toast._t);
-  toast._t = setTimeout(() => t.classList.remove("show"), 1600);
+  toast._t = setTimeout(() => t.classList.remove("show"), 2200);
 }
 
-async function copy(text) {
+async function copy(text, what = "Metin") {
   try {
     await navigator.clipboard.writeText(text);
-    toast("Panoya kopyalandı");
   } catch {
     const ta = h("textarea", {}, text);
     document.body.append(ta); ta.select(); document.execCommand("copy"); ta.remove();
-    toast("Panoya kopyalandı");
   }
+  toast(`${what} panoya kopyalandı. Canva'ya yapıştırabilirsiniz.`);
 }
 
-const fmtNum = (n, d = 0) => n == null || n === "" ? "—" :
+const num = (n, d = 0) => n == null || n === "" ? "" :
   Number(n).toLocaleString("tr-TR", { minimumFractionDigits: d, maximumFractionDigits: d });
-const fmtPct = (n) => n == null ? "" : `${n > 0 ? "+" : ""}${fmtNum(n, Math.abs(n) % 1 ? 1 : 0)}%`;
+const pct = (n) => n == null ? "" : `${n > 0 ? "+" : n < 0 ? "−" : ""}%${num(Math.abs(n), Math.abs(n) % 1 ? 1 : 0)}`;
+const dir = (n) => n > 0 ? "up" : n < 0 ? "down" : "";
 
-function card(id, title, copyFn, ...body) {
-  return h("section", { class: "card", id },
-    h("header", {}, h("h2", {}, title),
-      copyFn && h("button", { class: "small", onclick: () => copy(copyFn()) }, "Kopyala")),
+const DAYS = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
+const MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+function longDate(iso) {
+  const d = new Date(iso);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${DAYS[d.getDay()]}, ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function section(no, title, copyFn, ...body) {
+  return h("section", { class: "sec" },
+    h("div", { class: "sec-head" },
+      h("span", { class: "no" }, String(no).padStart(2, "0")),
+      h("h2", {}, title),
+      copyFn && h("button", { class: "btn ghost small", type: "button", title: "Bu bölümü kopyala",
+        onclick: () => copy(copyFn(), "Bölüm") }, icon("copy"), "Kopyala")),
     ...body);
 }
 
-// ---- metin çıktıları ------------------------------------------------------
+// ---- kopyalanacak metinler ------------------------------------------------
 
 const T = {
   wci: () => {
@@ -90,243 +141,275 @@ const T = {
       ...(w.paragraphs || []).flatMap((p) => [p, ""]), "Kaynak: www.drewry.co.uk"].join("\n");
   },
   trade: () => {
-    const c = doc.trade_cards || [];
     const t = doc.trade_data || {};
-    return [...c.map((k) => `${k.label}: ${k.value}`), "", t.summary || ""].join("\n").trim();
+    return [...tradeCards().map((k) => `${k.label}: ${k.value}`), "", t.summary || ""].join("\n").trim();
   },
   event: () => {
     const e = doc.event?.selected;
     if (!e) return "";
     return ["Haftanın Ücretsiz Etkinlik Duyurusu", e.title, e.description, "",
-      `Eğitim Tarihi: ${e.date || "—"}${e.time ? `, Saat: ${e.time}` : ""}`, "",
+      `Eğitim Tarihi: ${e.date || ""}${e.time ? `, Saat: ${e.time}` : ""}`, "",
       `Eğitim Yeri: ${[e.location, e.fee].filter(Boolean).join(", ")}`, "",
       `Kayıt için: ${e.register_url || ""}`].join("\n");
   },
-  news: (key, heading) => {
-    const items = (doc[key]?.items || []).filter((x) => x.include !== false);
-    return [heading, ...items.map((x) => x.summary + (withSources ? `\n(Kaynak: ${x.source} – ${x.url})` : ""))]
-      .join("\n\n");
-  },
-  nextWeek: () => {
+  news: (key, heading) => [heading, ...(doc[key]?.items || []).map((x) => x.summary)].join("\n\n"),
+  week: () => {
     const nw = doc.next_week || {};
     return ["Gelecek Haftanın Bilgilendirmesi",
-      ...(nw.days || []).map((d) => `${d.date_tr || d.date} ${d.weekday || ""}: ${d.text}`),
-      nw.highlight?.text ? `\nÖne çıkan: ${nw.highlight.text}` : ""].join("\n").trim();
+      ...(nw.days || []).map((d) => `${d.date_tr || d.date} ${d.weekday || ""}: ${d.text}`)].join("\n");
   },
   all: () => [
-    `Haftalık Dış Ticaret Bülteni — ${doc.date_tr} — Sayı: ${doc.issue}`, "",
+    `Haftalık Dış Ticaret Bülteni · ${doc.date_tr} · Sayı: ${doc.issue}`, "",
     T.wci(), "", T.trade(), "", T.event(), "",
     "Türkiye ve yurt dışında bu hafta hangi gelişmeler oldu? Birlikte bir göz atalım.", "",
     T.news("tr_news", "1- Türkiye'deki Gelişmeler;"), "",
-    T.news("intl_news", "2- Yurt Dışındaki Gelişmeler;"), "", T.nextWeek(),
+    T.news("intl_news", "2- Yurt Dışındaki Gelişmeler;"), "", T.week(),
   ].join("\n"),
 };
 
-// ---- bölümler -------------------------------------------------------------
+// ---- kontrol listesi -------------------------------------------------------
 
-function wciSection(history) {
-  const w = doc.wci;
-  if (!w) return card("wci", "1. Drewry Dünya Konteyner Endeksi (WCI)", null,
-    h("p", { class: "muted" }, "WCI verisi alınamadı."));
-  const paras = w.paragraphs?.length ? w.paragraphs : null;
-  return card("wci", "1. Drewry Dünya Konteyner Endeksi (WCI) – US$/40ft", T.wci,
-    h("p", { class: "hint" },
-      `Değerlendirme tarihi: ${w.assessment_date || "?"} · `, link(w.source_url, "Drewry kaynağı")),
-    h("div", { class: "kpis" },
-      h("div", { class: "kpi" }, h("div", { class: "label" }, "WCI kompozit"),
-        h("div", { class: "value" }, `${fmtNum(w.composite_usd_40ft)} $`)),
-      h("div", { class: "kpi" }, h("div", { class: "label" }, "Haftalık değişim"),
-        h("div", { class: `value ${w.change_pct > 0 ? "up" : w.change_pct < 0 ? "down" : ""}` },
-          fmtPct(w.change_pct) || "—"))),
-    paras
-      ? paras.map((_, i) => editable("p", w.paragraphs, i))
-      : h("p", { class: "muted" }, w.text_en || ""),
-    w.routes?.length ? h("div", { class: "table-wrap" }, h("table", {},
-      h("thead", {}, h("tr", {}, h("th", {}, "Hat"), h("th", { class: "num" }, "US$/40ft"), h("th", { class: "num" }, "Değişim"))),
-      h("tbody", {}, w.routes.map((r) => h("tr", {}, h("td", {}, r.route),
-        h("td", { class: "num" }, fmtNum(r.usd_40ft)),
-        h("td", { class: `num ${r.change_pct > 0 ? "up" : r.change_pct < 0 ? "down" : ""}` }, fmtPct(r.change_pct))))))) : null,
-    h("h3", {}, "Grafikler (bülten için ekran görüntüsü alınabilir)"),
-    h("div", { class: "two" },
-      w.chart_embed_url && h("div", { class: "chart-frame" },
-        h("iframe", { src: safeUrl(w.chart_embed_url), loading: "lazy", title: "Drewry WCI grafiği", allowfullscreen: true })),
-      w.routes_embed_url && h("div", { class: "chart-frame" },
-        h("iframe", { src: safeUrl(w.routes_embed_url), loading: "lazy", title: "WCI hat bazında grafik", allowfullscreen: true }))),
-    history?.length > 1 ? historyChart(history) : null,
-  );
+function checklist() {
+  const t = doc.trade_data || {};
+  const e = doc.event?.selected;
+  const items = [];
+  const month = t.month || "Son ay";
+  const official = t.official_url || "https://ticaret.gov.tr/istatistikler/dis-ticaret-istatistikleri";
+  if (t.exports_billion_usd == null || t.imports_billion_usd == null) {
+    const miss = [t.exports_billion_usd == null && "ihracat", t.imports_billion_usd == null && "ithalat"].filter(Boolean).join(" ve ");
+    items.push({ id: "trade", text: `${month} ${miss} rakamı bulunamadı. Resmî kaynaktan bakıp kutuya yazın.`, url: official, cta: "Ticaret Bakanlığı" });
+  }
+  if (!e) items.push({ id: "event", text: "Bu hafta otomatik olarak uygun bir ücretsiz etkinlik seçilemedi. Önerilerden birini seçin veya elle yazın." });
+  else if (!e.date || !e.time) items.push({ id: "eventdate", text: "Etkinliğin tarih ve saatini kayıt sayfasından teyit edin.", url: e.register_url || e.source_url, cta: "Etkinlik sayfası" });
+  for (const w of doc.warnings || []) {
+    if (/korundu/.test(w)) items.push({ id: `w:${w}`, text: w.replace("bu çalıştırmada üretilemedi; önceki sürüm korundu.", "bu sabah güncellenemedi; bir önceki taslağın metni gösteriliyor.") });
+  }
+  items.push({ id: "figures", text: "Rakamları bir kez gözden geçirin (WCI ve dış ticaret verileri).", url: doc.wci?.source_url, cta: "Drewry" });
+  return items;
 }
 
-function historyChart(hist) {
-  const W = 640, H = 160, P = 28;
-  const vals = hist.map((x) => x.composite);
+function noticeBox() {
+  doc.checks ||= {};
+  const items = checklist();
+  const left = items.filter((x) => !doc.checks[x.id]).length;
+  if (!left) return h("div", { class: "notice ok" }, icon("check"), "Kontroller tamam. Bülten yayına hazır.");
+  return h("div", { class: "notice" },
+    h("h2", {}, `Yayından önce kontrol edin (${left})`),
+    h("ul", {}, items.map((x) => h("li", { class: doc.checks[x.id] ? "done" : "" },
+      h("input", { type: "checkbox", checked: !!doc.checks[x.id], "aria-label": "Tamamlandı",
+        onchange: (ev) => { doc.checks[x.id] = ev.target.checked; save(); render(); } }),
+      h("span", {}, x.text, x.url ? [" ", link(x.url, `${x.cta} ↗`)] : null)))));
+}
+
+// ---- bölümler -------------------------------------------------------------
+
+function wciSection() {
+  const w = doc.wci;
+  if (!w) return section(1, "Drewry Dünya Konteyner Endeksi", null, h("p", { class: "empty" }, "Bu hafta WCI verisi alınamadı."));
+  const view = w.chart_embed_url ? w.chart_embed_url.replace(/\?embed$/, "") : w.source_url;
+  return section(1, "Drewry Dünya Konteyner Endeksi", T.wci,
+    w.composite_usd_40ft ? h("div", { class: "figure-line" },
+      h("span", { class: "big" }, `${num(w.composite_usd_40ft)} $`),
+      h("span", { class: "meta" }, "40 ft konteyner başına"),
+      w.change_pct != null ? h("span", { class: `chg ${dir(w.change_pct)}` }, `${pct(w.change_pct)} haftalık`) : null) : null,
+    (w.paragraphs?.length ? w.paragraphs : []).map((_, i) => editable("p", w.paragraphs, i)),
+    w.routes?.length ? h("table", { class: "routes" }, h("tbody", {}, w.routes.map((r) =>
+      h("tr", {}, h("td", {}, r.route), h("td", {}, `${num(r.usd_40ft)} $`),
+        h("td", { class: dir(r.change_pct) }, pct(r.change_pct)))))) : null,
+    history.length > 2 ? spark(history) : null,
+    h("div", { class: "meta" },
+      `${w.assessment_date ? new Date(w.assessment_date).toLocaleDateString("tr-TR", { day: "numeric", month: "long" }) + " değerlendirmesi · " : ""}`,
+      link(view, "Drewry grafiğini aç ↗")));
+}
+
+function spark(hist) {
+  const W = 600, H = 56, vals = hist.map((x) => x.composite);
   const min = Math.min(...vals), max = Math.max(...vals), span = max - min || 1;
-  const pts = hist.map((x, i) => [P + (i * (W - 2 * P)) / (hist.length - 1), H - P - ((x.composite - min) / span) * (H - 2 * P)]);
-  const ns = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(ns, "svg");
-  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  svg.setAttribute("role", "img");
-  svg.setAttribute("aria-label", "WCI kompozit geçmişi");
-  svg.style.width = "100%";
-  const path = document.createElementNS(ns, "polyline");
-  path.setAttribute("points", pts.map((p) => p.join(",")).join(" "));
-  path.setAttribute("fill", "none");
-  path.setAttribute("stroke", "var(--accent)");
-  path.setAttribute("stroke-width", "2.5");
-  svg.append(path);
-  for (const [i, [x, y]] of pts.entries()) {
-    const c = document.createElementNS(ns, "circle");
-    c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("r", 3.5); c.setAttribute("fill", "var(--accent)");
-    const t = document.createElementNS(ns, "title");
-    t.textContent = `${hist[i].date}: ${fmtNum(hist[i].composite)} $`;
-    c.append(t); svg.append(c);
+  const pts = hist.map((x, i) => `${(i * W) / (hist.length - 1)},${H - 4 - ((x.composite - min) / span) * (H - 8)}`).join(" ");
+  const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  s.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  s.setAttribute("preserveAspectRatio", "none");
+  s.setAttribute("class", "spark");
+  s.setAttribute("role", "img");
+  s.setAttribute("aria-label", "WCI'nin son haftalardaki seyri");
+  s.innerHTML = `<polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+  return s;
+}
+
+function tradeCards() {
+  const t = doc.trade_data || {};
+  if (!doc.trade_cards) {
+    const fmt = (v) => v != null ? `${Number(v).toLocaleString("tr-TR", { maximumFractionDigits: 3 })} Milyar $` : "";
+    doc.trade_cards = [
+      { label: doc.annual_exports_card?.label || "Yıllık İhracat", value: doc.annual_exports_card?.value || "" },
+      { label: `${t.month || ""} Ayı Türkiye İhracatı`.trim(), value: fmt(t.exports_billion_usd) },
+      { label: `${t.month || ""} Ayı Türkiye İthalatı`.trim(), value: fmt(t.imports_billion_usd) },
+    ];
   }
-  return h("div", {}, h("h3", {}, "WCI geçmişi (sistemin kaydettiği haftalar)"), svg);
+  return doc.trade_cards;
 }
 
 function tradeSection() {
   const t = doc.trade_data || {};
-  if (!doc.trade_cards) {
-    doc.trade_cards = [
-      { label: doc.annual_exports_card?.label || "Yıllık İhracat", value: doc.annual_exports_card?.value || "" },
-      { label: `${t.month || "?"} Ayı Türkiye İhracatı`, value: t.exports_billion_usd != null ? `${fmtNum(t.exports_billion_usd, 3)} Milyar $` : "— (doldurun)" },
-      { label: `${t.month || "?"} Ayı Türkiye İthalatı`, value: t.imports_billion_usd != null ? `${fmtNum(t.imports_billion_usd, 3)} Milyar $` : "— (doldurun)" },
-    ];
-  }
-  return card("trade", "2. Türkiye İthalat ve İhracat Verileri", T.trade,
-    h("p", { class: "hint" }, "Rakamları resmî kaynaktan teyit edin: ",
-      link(t.official_url || "https://ticaret.gov.tr/istatistikler/dis-ticaret-istatistikleri", "Ticaret Bakanlığı dış ticaret istatistikleri"),
-      t.confidence ? ` · Model güveni: ${t.confidence}` : ""),
-    h("div", { class: "kpis" }, doc.trade_cards.map((k) => h("div", { class: "kpi" },
-      editable("div", k, "label", { class: "label" }), editable("div", k, "value", { class: "value" })))),
-    h("p", { class: "muted" },
-      t.exports_yoy_pct != null ? `İhracat yıllık ${fmtPct(t.exports_yoy_pct)}` : "",
-      t.imports_yoy_pct != null ? ` · İthalat yıllık ${fmtPct(t.imports_yoy_pct)}` : "",
-      t.trade_deficit_billion_usd != null ? ` · Dış ticaret açığı ${fmtNum(t.trade_deficit_billion_usd, 2)} milyar $` : "",
-      t.ytd_exports_billion_usd != null ? ` · Yılbaşından bu yana ihracat ${fmtNum(t.ytd_exports_billion_usd, 1)} milyar $` : ""),
+  const cards = tradeCards();
+  // Sosyal medya bağlantılarını ve aynı kaynağın tekrarlarını gösterme
+  const seen = new Set();
+  const srcs = (t.sources || []).filter((s) => {
+    const k = s.source || host(s.url);
+    if (/instagram|facebook|twitter|x\.com|linkedin|youtube/i.test(host(s.url)) || seen.has(k)) return false;
+    seen.add(k); return true;
+  }).slice(0, 3);
+  return section(2, "Türkiye İthalat ve İhracat Verileri", T.trade,
+    h("div", { class: "figures" }, cards.map((k) => h("div", {},
+      editable("div", k, "label", { class: "lbl" }),
+      editable("div", k, "value", { class: `val ${k.value ? "" : "missing"}`, "data-ph": "Rakamı yazın" })))),
     t.summary != null ? editable("p", t, "summary") : null,
-    t.sources?.length ? h("div", { class: "news src" }, "Kaynaklar: ",
-      t.sources.map((s, j) => [j ? " · " : "", link(s.url, s.source || host(s.url))])) : null);
+    h("div", { class: "meta" }, "Kaynak: ",
+      link(t.official_url || "https://ticaret.gov.tr/istatistikler/dis-ticaret-istatistikleri", "Ticaret Bakanlığı ↗"),
+      srcs.map((s) => [" · ", link(s.url, s.source || host(s.url))])));
 }
 
 function eventSection() {
-  const ev = doc.event || {};
+  doc.event ||= { selected: null, alternatives: [] };
+  const ev = doc.event;
   const e = ev.selected;
-  const field = (label, key) => h("div", {}, h("strong", {}, `${label}: `), editable("span", e, key));
-  return card("event", "3. Haftanın Ücretsiz Etkinlik Duyurusu", T.event,
-    h("p", { class: "hint" }, "Tarih, saat, ücretsiz katılım ve kayıt linkini etkinlik sayfasından mutlaka kontrol edin."),
+  const fact = (label, key, ph) => [h("dt", {}, label), h("dd", {}, editable("span", e, key, { "data-ph": ph }))];
+  const pickFrom = (list, isCand) => list.length ? h("details", { class: "more", open: !e },
+    h("summary", {}, icon("chevron"), e ? `Başka bir etkinlik seç (${list.length})` : `Önerilen etkinlikler (${list.length})`),
+    h("ul", {}, list.map((a, i) => h("li", {},
+      h("div", {}, h("div", {}, a.title), h("div", { class: "src" },
+        [a.organizer, a.date, a.location].filter(Boolean).join(" · "), (a.organizer || a.date || a.location) ? " · " : "",
+        link(a.source_url || a.url, isCand ? sourceName(a) : "Sayfayı aç ↗"))),
+      h("button", { class: "btn small", type: "button", onclick: () => {
+        const chosen = isCand
+          ? { title: a.title, description: a.snippet || "", date: "", time: "", location: "", fee: "Ücretsiz", register_url: a.url, source_url: a.url }
+          : a;
+        if (!isCand) ev.alternatives.splice(i, 1, ...(e ? [e] : []));
+        ev.selected = chosen; save(); render();
+      } }, "Seç"))))) : null;
+
+  const alts = ev.alternatives || [];
+  const cands = alts.length ? [] : (doc.candidates?.events || []).slice(0, 6);
+  return section(3, "Haftanın Ücretsiz Etkinlik Duyurusu", e ? T.event : null,
     e ? h("div", {},
-      editable("div", e, "title", { class: "title", style: "font-weight:600;font-size:16px" }),
-      e.organizer ? h("div", { class: "muted" }, e.organizer) : null,
-      editable("p", e, "description"),
-      field("Eğitim Tarihi", "date"), field("Saat", "time"), field("Eğitim Yeri", "location"),
-      field("Ücret", "fee"), field("Kayıt için", "register_url"),
-      h("div", { class: "news src", style: "margin-top:6px" }, "Kaynak: ", link(e.source_url, e.source || host(e.source_url))))
-      : h("p", { class: "muted" }, "Uygun ücretsiz etkinlik bulunamadı. Alternatiflere veya aday listesine bakın."),
-    ev.alternatives?.length ? h("div", { class: "alts" }, h("h3", {}, "Alternatifler"),
-      h("ul", { class: "news" }, ev.alternatives.map((a, i) => h("li", {},
-        h("span", {}, ""),
-        h("div", { class: "body" },
-          h("div", { class: "title" }, a.title),
-          h("div", { class: "src" }, [a.organizer, a.date, a.time, a.location].filter(Boolean).join(" · "), " ",
-            link(a.source_url, "kaynak"),
-            h("button", { class: "small", onclick: () => {
-              const cur = ev.selected; ev.selected = a;
-              ev.alternatives.splice(i, 1, ...(cur ? [cur] : [])); save(); render();
-            } }, "Bunu seç"))))))) : null);
+      editable("div", e, "title", { class: "event-title", "data-ph": "Etkinlik adı" }),
+      editable("p", e, "description", { "data-ph": "Kısa açıklama" }),
+      h("dl", { class: "facts" },
+        fact("Tarih", "date", "GG.AA.YYYY"), fact("Saat", "time", "SS:SS-SS:SS"),
+        fact("Yer", "location", "Online / şehir"), fact("Ücret", "fee", "Ücretsiz"),
+        fact("Kayıt", "register_url", "Kayıt bağlantısı")))
+      : h("div", { class: "empty" }, "Bu hafta otomatik seçim yapılamadı. Aşağıdan bir etkinlik seçin ya da ",
+        h("button", { class: "btn small", type: "button", onclick: () => {
+          ev.selected = { title: "", description: "", date: "", time: "", location: "", fee: "Ücretsiz", register_url: "" };
+          save(); render();
+        } }, icon("plus"), "Elle yazın"), "."),
+    pickFrom(alts.length ? alts : cands, !alts.length));
 }
 
-function newsSection(key, num, title, heading) {
+function newsSection(no, key, title, heading) {
   const sec = doc[key];
-  if (!sec) return card(key, `${num}. ${title}`, null, h("p", { class: "muted" }, "Bu bölüm üretilemedi."));
-  const sel = sec.items.filter((x) => x.include !== false).length;
-  const item = (x, i, reserve) => h("li", { class: x.include === false && !reserve ? "off" : "" },
-    reserve
-      ? h("button", { class: "small", title: "Ana listeye ekle", onclick: () => {
-          sec.reserve.splice(i, 1); x.include = true; sec.items.push(x); save(); render();
-        } }, "+")
-      : h("input", { type: "checkbox", checked: x.include !== false, title: "Bültene dahil et",
-          onchange: (ev) => { x.include = ev.target.checked; save(); render(); } }),
-    h("div", { class: "body" },
-      editable("div", x, "title", { class: "title" }),
-      editable("div", x, "summary", { class: "summary" }),
-      h("div", { class: "src" },
-        link(x.url, x.source || host(x.url)),
-        x.published ? h("span", {}, x.published.slice(0, 10)) : null,
-        x.category ? h("span", { class: "tag" }, x.category) : null,
-        x.score != null ? h("span", {}, `önem ${x.score}/10`) : null,
-        x.also_reported_by?.length ? h("span", {}, "ayrıca: ",
-          x.also_reported_by.slice(0, 5).map((a, j) => [j ? ", " : "", link(a.url, host(a.url) || a.source)])) : null,
-        !reserve && h("span", {},
-          h("button", { class: "small", title: "Yukarı taşı", disabled: i === 0, onclick: () => move(sec.items, i, -1) }, "↑"), " ",
-          h("button", { class: "small", title: "Aşağı taşı", disabled: i === sec.items.length - 1, onclick: () => move(sec.items, i, 1) }, "↓")))));
-  return card(key, `${num}. ${title}`, () => T.news(key, heading),
-    h("p", { class: "hint" }, `${sel} haber seçili. Metinlere tıklayıp düzenleyebilir, kutucukla çıkarabilir, yedeklerden ekleyebilirsiniz.`),
-    h("ul", { class: "news" }, sec.items.map((x, i) => item(x, i, false))),
-    sec.reserve?.length ? h("details", {}, h("summary", {}, `Yedek haberler (${sec.reserve.length})`),
-      h("ul", { class: "news" }, sec.reserve.map((x, i) => item(x, i, true)))) : null);
+  if (!sec) return section(no, title, null, h("p", { class: "empty" }, "Bu bölüm bu hafta hazırlanamadı."));
+  sec.reserve ||= [];
+  const move = (i, d) => { const [x] = sec.items.splice(i, 1); sec.items.splice(i + d, 0, x); save(); render(); };
+  const remove = (i) => { const [x] = sec.items.splice(i, 1); sec.reserve.unshift(x); save(); render(); toast("Haber çıkarıldı. Önerilen haberler listesinden geri ekleyebilirsiniz."); };
+  const add = (i) => { const [x] = sec.reserve.splice(i, 1); sec.items.push(x); save(); render(); };
+
+  return section(no, title, () => T.news(key, heading),
+    h("ol", { class: "news" }, sec.items.map((x, i) => h("li", {},
+      editable("div", x, "title", { class: "t" }),
+      editable("div", x, "summary", { class: "s" }),
+      h("div", { class: "src" }, link(x.url, sourceName(x))),
+      h("div", { class: "tools" },
+        h("button", { class: "tool", type: "button", title: "Yukarı taşı", disabled: i === 0, onclick: () => move(i, -1) }, icon("up")),
+        h("button", { class: "tool", type: "button", title: "Aşağı taşı", disabled: i === sec.items.length - 1, onclick: () => move(i, 1) }, icon("down")),
+        h("button", { class: "tool rm", type: "button", title: "Bültenden çıkar", onclick: () => remove(i) }, icon("x")))))),
+    sec.reserve.length ? h("details", { class: "more" },
+      h("summary", {}, icon("chevron"), `Önerilen diğer haberler (${sec.reserve.length})`),
+      h("ul", {}, sec.reserve.map((x, i) => h("li", {},
+        h("div", {}, h("div", {}, x.title), h("div", { class: "src" }, link(x.url, sourceName(x)))),
+        h("button", { class: "btn small", type: "button", onclick: () => add(i) }, icon("plus"), "Ekle"))))) : null);
 }
 
-function move(arr, i, d) {
-  const [x] = arr.splice(i, 1);
-  arr.splice(i + d, 0, x);
-  save(); render();
-}
-
-function nextWeekSection() {
+function weekSection() {
   const nw = doc.next_week;
-  if (!nw) return card("next", "6. Gelecek Haftanın Bilgilendirmesi", null,
-    h("p", { class: "muted" }, "Takvim üretilemedi. "), link("https://bigpara.hurriyet.com.tr/haberler/gunluk-piyasa-takvimi/gelecek-hafta/", "Bigpara takvimi"));
-  return card("next", "6. Gelecek Haftanın Bilgilendirmesi", T.nextWeek,
-    h("p", { class: "hint" }, "Kaynak: ", link("https://bigpara.hurriyet.com.tr/haberler/gunluk-piyasa-takvimi/gelecek-hafta/", "Hürriyet Bigpara – Gelecek Hafta Piyasa Takvimi")),
-    h("div", { class: "days" }, (nw.days || []).map((d) => h("div", { class: "day" },
-      h("div", { class: "d" }, `${d.date_tr || d.date} ${d.weekday || ""}`), editable("div", d, "text")))),
-    nw.highlight ? h("p", {}, h("strong", {}, "Öne çıkan: "), editable("span", nw.highlight, "text")) : null);
+  const bigpara = "https://bigpara.hurriyet.com.tr/haberler/gunluk-piyasa-takvimi/gelecek-hafta/";
+  if (!nw) return section(6, "Gelecek Haftanın Bilgilendirmesi", null,
+    h("p", { class: "empty" }, "Takvim bu hafta hazırlanamadı. ", link(bigpara, "Bigpara takvimini açın ↗")));
+  return section(6, "Gelecek Haftanın Bilgilendirmesi", T.week,
+    h("table", { class: "week" }, h("tbody", {}, (nw.days || []).map((d) => h("tr", {},
+      h("td", {}, h("span", { class: "d" }, (d.date_tr || d.date).replace(/ \d{4}$/, "")), h("span", { class: "w" }, d.weekday || "")),
+      h("td", {}, editable("div", d, "text")))))),
+    h("div", { class: "meta", style: "margin-top:10px" }, "Kaynak: ", link(bigpara, "Bigpara ekonomik takvim ↗")));
 }
 
-function candidatesSection() {
-  const c = doc.candidates || {};
-  const groups = [["tr", "Türkiye"], ["intl", "Yurt dışı"], ["events", "Etkinlik"], ["trade", "Dış ticaret verisi"]];
-  const list = (arr) => {
-    const ol = h("ol", {}, arr.map((x) => h("li", { "data-q": `${x.title} ${x.source}`.toLocaleLowerCase("tr") },
-      link(x.url, x.title), h("span", { class: "muted" }, ` — ${x.source}${x.published ? ", " + x.published.slice(0, 10) : ""}`))));
-    const input = h("input", { type: "search", placeholder: "Ara…", oninput: (e) => {
-      const q = e.target.value.toLocaleLowerCase("tr");
-      for (const li of ol.children) li.hidden = q && !li.dataset.q.includes(q);
-    } });
-    return [input, ol];
-  };
-  return h("section", { class: "card cand no-print" },
-    h("header", {}, h("h2", {}, "Tüm aday haberler"),
-      h("span", { class: "chip" }, groups.map(([k]) => (c[k] || []).length).reduce((a, b) => a + b, 0) + " aday")),
-    h("p", { class: "hint" }, "Sistemin taradığı tüm haberler. Seçimde gözden kaçan bir şey varsa buradan bulabilirsiniz."),
-    groups.map(([k, label]) => h("details", {}, h("summary", {}, `${label} (${(c[k] || []).length})`), list(c[k] || []))));
-}
-
-// ---- yükleme ve çizim -----------------------------------------------------
-
-let history = [];
+// ---- çizim ----------------------------------------------------------------
 
 function render() {
-  const gen = doc.generated_at ? new Date(doc.generated_at).toLocaleString("tr-TR") : "";
+  const scrollY = window.scrollY;
+  const issueNo = String(doc.issue || "").split("/").pop().trim();
   app.replaceChildren(...[
-    h("div", { class: "meta" },
-      h("h1", {}, `${doc.date_tr} · Sayı ${doc.issue}`),
-      h("span", { class: "chip" }, `Oluşturuldu: ${gen}`),
-      doc.llm ? h("span", { class: "chip" }, `Model: ${doc.llm}`) : null,
-      h("label", { class: "chip", style: "cursor:pointer" },
-        h("input", { type: "checkbox", checked: withSources, onchange: (e) => { withSources = e.target.checked; } }),
-        " Kopyalarken haber kaynaklarını ekle")),
-    doc.warnings?.length ? h("div", { class: "warn" }, h("strong", {}, "Uyarılar"),
-      h("ul", {}, doc.warnings.map((w) => h("li", {}, w)))) : null,
-    wciSection(history),
-    tradeSection(),
-    eventSection(),
-    newsSection("tr_news", 4, "Türkiye'deki Gelişmeler", "1- Türkiye'deki Gelişmeler;"),
-    newsSection("intl_news", 5, "Yurt Dışındaki Gelişmeler", "2- Yurt Dışındaki Gelişmeler;"),
-    nextWeekSection(),
-    candidatesSection(),
+    h("div", { class: "intro" },
+      h("h1", {}, doc.date_tr, " ", h("span", { class: "issue-no" }, `· Sayı ${issueNo}`)),
+      h("p", {}, isLatest
+        ? `Taslak ${longDate(doc.generated_at)} itibarıyla hazırlandı. Metinlere tıklayarak düzenleyebilirsiniz.`
+        : "Geçmiş bir bülteni görüntülüyorsunuz.")),
+    isLatest ? noticeBox() : null,
+    h("article", { class: "paper" },
+      wciSection(),
+      tradeSection(),
+      eventSection(),
+      newsSection(4, "tr_news", "Türkiye'deki Gelişmeler", "1- Türkiye'deki Gelişmeler;"),
+      newsSection(5, "intl_news", "Yurt Dışındaki Gelişmeler", "2- Yurt Dışındaki Gelişmeler;"),
+      weekSection()),
+    h("p", { class: "foot" }, h("span", { class: "saved" }, "Değişiklikleriniz bu tarayıcıda otomatik kaydedilir.")),
   ].filter(Boolean));
+  window.scrollTo(0, scrollY);
 }
+
+// ---- pencereler -----------------------------------------------------------
+
+function dialog(title, body, actions) {
+  const d = $("#dialog");
+  $("#dialogBody").replaceChildren(h("div", { class: "dlg" }, h("h2", {}, title), body,
+    h("div", { class: "dlg-actions" }, actions || h("button", { class: "btn", type: "button", onclick: () => d.close() }, "Kapat"))));
+  d.showModal();
+}
+
+function actionsUrl() {
+  const m = location.hostname.match(/^([^.]+)\.github\.io$/);
+  const repo = location.pathname.split("/").filter(Boolean)[0];
+  return m && repo ? `https://github.com/${m[1]}/${repo}/actions/workflows/bulletin.yml` : null;
+}
+
+const ACTIONS = {
+  help: () => dialog("Nasıl kullanılır?", h("ol", {},
+    h("li", {}, "Taslak her cuma sabah 06:30'da kendiliğinden hazırlanır."),
+    h("li", {}, "Üstteki sarı kutudaki maddeleri kontrol edip işaretleyin."),
+    h("li", {}, "Değiştirmek istediğiniz metne tıklayıp yazın. Haberleri oklarla sıralayabilir, × ile çıkarabilir, “Önerilen diğer haberler”den ekleyebilirsiniz."),
+    h("li", {}, "“Bülteni kopyala” ile tüm metni alıp Canva'ya yapıştırın. Tek bir bölüm için o bölümdeki “Kopyala”yı kullanın."))),
+  rerun: () => {
+    const url = actionsUrl();
+    const d = $("#dialog");
+    dialog("Taslağı yeniden oluştur",
+      h("p", {}, "Haberler baştan toplanır ve taslak yeniden yazılır; yaklaşık 10 dakika sürer. Açılacak GitHub sayfasında sağdaki “Run workflow” düğmesine, ardından yeşil “Run workflow” düğmesine basın. Bittiğinde bu sayfayı yenileyin."),
+      [h("button", { class: "btn", type: "button", onclick: () => d.close() }, "Vazgeç"),
+       url && h("a", { class: "btn primary", href: url, target: "_blank", rel: "noopener", onclick: () => d.close() }, "GitHub'da aç", icon("ext"))]);
+  },
+  reset: () => {
+    const d = $("#dialog");
+    dialog("Değişiklikleriniz geri alınsın mı?",
+      h("p", {}, "Bu bülten için yaptığınız tüm düzenlemeler silinir ve otomatik hazırlanan taslak yeniden yüklenir."),
+      [h("button", { class: "btn", type: "button", onclick: () => d.close() }, "Vazgeç"),
+       h("button", { class: "btn primary", type: "button", onclick: async () => {
+         d.close();
+         try { localStorage.removeItem(storeKey); } catch {}
+         await load(doc.date);
+         toast("Otomatik taslak yeniden yüklendi.");
+       } }, "Geri al")]);
+  },
+};
+
+// ---- yükleme --------------------------------------------------------------
 
 async function load(date) {
   const url = date ? `data/bulletins/${date}.json` : "data/latest.json";
@@ -335,41 +418,48 @@ async function load(date) {
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(storeKey) || "null"); } catch {}
   doc = saved || fresh;
-  for (const k of ["tr_news", "intl_news"]) if (doc[k]) doc[k].reserve ||= [];
   render();
   return fresh;
 }
 
 async function init() {
+  $("#copyAll").append(icon("copy"), h("span", { class: "lbl-long" }, "Bülteni kopyala"), h("span", { class: "lbl-short" }, "Kopyala"));
+  $("#print").append(icon("printer"), h("span", { class: "lbl" }, "PDF"));
+  $("#menuBtn").append(icon("more"));
+
   const sel = $("#archive");
+  let idx = [];
   try {
-    const idx = await (await fetch("data/index.json", { cache: "no-store" })).json();
-    sel.replaceChildren(...idx.map((x) => h("option", { value: x.date }, `${x.date} · Sayı ${x.issue}`)));
+    idx = await (await fetch("data/index.json", { cache: "no-store" })).json();
+    sel.replaceChildren(...idx.map((x, i) => h("option", { value: x.date },
+      `${new Date(x.date).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" })}${i === 0 && idx.length > 1 ? " (son)" : ""}`)));
   } catch {}
   try { history = await (await fetch("data/wci_history.json", { cache: "no-store" })).json(); } catch {}
 
-  sel.addEventListener("change", () => load(sel.value));
-  $("#copyAll").addEventListener("click", () => copy(T.all()));
+  sel.addEventListener("change", () => { isLatest = sel.selectedIndex === 0; load(sel.value); });
+  $("#copyAll").addEventListener("click", () => copy(T.all(), "Bülten"));
   $("#print").addEventListener("click", () => window.print());
-  $("#reset").addEventListener("click", async () => {
-    if (!confirm("Bu bülten için yaptığınız tüm düzenlemeler silinsin mi?")) return;
-    try { localStorage.removeItem(storeKey); } catch {}
-    await load(doc.date);
-    toast("Orijinal taslak yüklendi");
-  });
 
-  // GitHub Pages adresinden Actions sayfasını türet (kullanici.github.io/repo)
-  const rerun = $("#rerun");
-  const m = location.hostname.match(/^([^.]+)\.github\.io$/);
-  const repo = location.pathname.split("/").filter(Boolean)[0];
-  if (m && repo) rerun.href = `https://github.com/${m[1]}/${repo}/actions/workflows/bulletin.yml`;
-  else rerun.hidden = true;
+  const menu = $("#menu"), menuBtn = $("#menuBtn");
+  const closeMenu = () => { menu.hidden = true; menuBtn.setAttribute("aria-expanded", "false"); };
+  menuBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    menu.hidden = !menu.hidden;
+    menuBtn.setAttribute("aria-expanded", String(!menu.hidden));
+  });
+  document.addEventListener("click", closeMenu);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
+  menu.addEventListener("click", (e) => {
+    const act = e.target.closest("[data-act]")?.dataset.act;
+    if (act) { closeMenu(); ACTIONS[act](); }
+  });
+  if (!actionsUrl()) menu.querySelector('[data-act="rerun"]').hidden = true;
 
   try {
     const b = await load();
     sel.value = b.date;
-  } catch (e) {
-    app.replaceChildren(h("p", { class: "warn" }, "Henüz bülten verisi yok. GitHub Actions iş akışını çalıştırın."));
+  } catch {
+    app.replaceChildren(h("div", { class: "empty" }, "Henüz hazırlanmış bir bülten yok. İlk taslak cuma sabahı oluşturulacak."));
   }
 }
 

@@ -3,30 +3,44 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bülten Paneli · İnovakademi</title>
+<title>Dış Ticaret Bülteni</title>
 <meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="topbar no-print">
-  <div class="brand">
-    <strong>İnovakademi</strong>
-    <span>Haftalık Dış Ticaret Bülteni · Panel</span>
-  </div>
-  <div class="actions">
-    <label class="sr" for="archive">Arşiv</label>
-    <select id="archive" title="Arşivden bülten seç"></select>
-    <button id="copyAll" class="primary">Tümünü kopyala</button>
-    <button id="print">Yazdır / PDF</button>
-    <a id="rerun" class="btn" target="_blank" rel="noopener">Yeniden oluştur ↗</a>
-    <button id="reset" class="ghost" title="Bu bülten için yaptığınız düzenlemeleri silip orijinale döner">Düzenlemeleri sıfırla</button>
+<header class="bar">
+  <div class="bar-in">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"></span>
+      <span>Dış Ticaret Bülteni</span>
+    </div>
+    <label class="issue">
+      <span class="sr">Bülten tarihi</span>
+      <select id="archive"></select>
+    </label>
+    <div class="bar-actions">
+      <button id="copyAll" class="btn primary" type="button"></button>
+      <button id="print" class="btn icon-only-sm" type="button" title="PDF olarak kaydet veya yazdır"></button>
+      <div class="menu">
+        <button id="menuBtn" class="btn ghost square" type="button" aria-haspopup="true" aria-expanded="false" title="Diğer işlemler"></button>
+        <div id="menu" class="menu-pop" role="menu" hidden>
+          <button type="button" role="menuitem" data-act="help">Nasıl kullanılır?</button>
+          <button type="button" role="menuitem" data-act="rerun">Taslağı yeniden oluştur</button>
+          <button type="button" role="menuitem" data-act="reset" class="danger">Değişikliklerimi geri al</button>
+        </div>
+      </div>
+    </div>
   </div>
 </header>
 
-<main id="app">
-  <p class="muted">Yükleniyor…</p>
+<main id="app" class="page">
+  <p class="loading">Yükleniyor…</p>
 </main>
 
+<dialog id="dialog"><div id="dialogBody"></div></dialog>
 <div id="toast" role="status" aria-live="polite"></div>
 <script src="app.js"></script>
 </body>
