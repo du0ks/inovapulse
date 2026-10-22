@@ -119,7 +119,9 @@ def _gemini(system, user, max_tokens):
     body = {
         "systemInstruction": {"parts": [{"text": system}]},
         "contents": [{"role": "user", "parts": [{"text": user}]}],
-        "generationConfig": {"responseMimeType": "application/json", "maxOutputTokens": max_tokens},
+        # Düşünme tokenları da bu limite dahil; yanıt kesilmesin diye geniş tutuluyor
+        "generationConfig": {"responseMimeType": "application/json",
+                             "maxOutputTokens": max(max_tokens, 32768)},
     }
     for attempt in range(4):
         r = requests.post(url, params={"key": key}, json=body, timeout=300)
