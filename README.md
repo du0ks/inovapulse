@@ -1,22 +1,24 @@
 # İnovaPulse: Haftalık Dış Ticaret Bülteni otomasyonu
 
-Her cuma sabahı bülten taslağını otomatik hazırlar ve web panelinde yayınlar:
+Her hafta perşembeyi cumaya bağlayan gece bülten taslağını otomatik hazırlar ve web panelinde yayınlar
+(cuma 00:17 TSİ; eksik kalan bölümler 04:47 ve 07:23'te yeniden denenir, taslak 10:00'dan önce hazırdır):
 
 | # | Bölüm | Kaynak | Nasıl |
 |---|-------|--------|-------|
 | 1 | Drewry WCI (US$/40ft) | drewry.co.uk (perşembe verisi) | Sayfa metni çekilir, Türkçe 2 paragraf özet + hat tablosu, Drewry grafikleri panelde gömülü |
-| 2 | Türkiye ihracat / ithalat | Ticaret Bakanlığı + haberler | Son ayın verisi çıkarılır, kartlar düzenlenebilir, resmî linkten teyit edilmeli |
-| 3 | Ücretsiz etkinlik | Tavily + Google News | 1 seçim + alternatifler |
-| 4 | Türkiye'deki gelişmeler (10) | Ticaret Bakanlığı, AA, Dünya, Ekonomim, Bloomberg HT, Foreks, TRT, Hürriyet, Google News, Tavily | Tekrarlar birleştirilir, önem puanı, tam metinle doğrulanmış özet |
-| 5 | Yurt dışı gelişmeler (10) | AA English, WTO, Google News (EN), Tavily | Aynı |
-| 6 | Gelecek hafta | Bigpara ekonomik takvim API | Her gün için dış ticarete en ilgili veri |
+| 2 | Türkiye ihracat / ithalat | Ticaret Bakanlığı "<Ay> Ayı Dış Ticaret Verileri" haberi | Rakamlar doğrudan resmî metinden okunur (LLM yok); yıllık kutu `config.ANNUAL_EXPORTS_OVERRIDE` |
+| 3 | Grafik haberleri (2) | Visual Capitalist RSS | Ekonomi/ticaret konulu iki infografik, görsel linki + Türkçe paragraf |
+| 4 | Ücretsiz etkinlik | Ticaret Bakanlığı duyuruları, İTO etkinlikleri, Tavily, Google News | Sayfalar açılır; yalnızca ileri tarihli, online ve ücretsiz olanlar seçilir |
+| 5 | Türkiye'deki gelişmeler (10) | Ticaret Bakanlığı, AA, Dünya, Ekonomim, Bloomberg HT, Foreks, TRT, Hürriyet, Google News, Tavily | Tekrarlar birleştirilir; her link açılıp içerik ve tarih kontrol edilir (abonelik duvarlı, kısa veya eski haberler elenir) |
+| 6 | Yurt dışı gelişmeler (10) | AA English, WTO, Google News (EN), Tavily | Aynı |
+| 7 | Gelecek hafta | Bigpara ekonomik takvim API + resmî tatiller | Her gün için dış ticarete en ilgili veri; bayram günleri otomatik yazılır |
 
 Kaynak ve anahtar kelimeler `pipeline/config.py`, editoryal kurallar `pipeline/prompts.py` içinde.
 
 ## Mimari (ücretsiz)
 
 ```
-GitHub Actions (cuma 09:15 TSİ cron)
+GitHub Actions (cuma 00:17 TSİ + 2 yeniden deneme)
   └─ python -m pipeline.build
        ├─ toplayıcılar: RSS, Google News, Ticaret Bakanlığı, Drewry, Bigpara, (Tavily)
        ├─ LLM: OpenRouter ücretsiz / Claude / Gemini

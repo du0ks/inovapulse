@@ -16,6 +16,10 @@ ISSUE_ANCHOR_NUMBER = 205
 
 LOOKBACK_DAYS = 7
 
+# Bültendeki "<yıl> Türkiye İhracatı" kutusu. Ticaret Bakanlığı'nın aralık ayı öncü verisi otomatik
+# okunur; kesinleşmiş (TÜİK nihai) rakam farklıysa buraya yazılır ve öncelikli kullanılır.
+ANNUAL_EXPORTS_OVERRIDE = {2025: 275.844}
+
 # Yerel çalıştırmada .env dosyasındaki anahtarları yükle (repoya eklenmez)
 _env = ROOT / ".env"
 if _env.exists():
@@ -95,11 +99,11 @@ TAVILY_NEWS_INTL = [
     "major economies exports imports data released this week",
     "container shipping freight rates news this week",
 ]
+# {ay}: bülten ayı ve sonraki ay (ör. "Ekim 2026", "Kasım 2026")
 TAVILY_EVENTS = [
-    "ücretsiz ihracat webinarı",
-    "ücretsiz dış ticaret eğitimi online",
-    "ihracatçı birlikleri ücretsiz eğitim semineri",
-    "KOSGEB ticaret odası ücretsiz webinar e-ihracat",
+    "ücretsiz online ihracat webinarı {ay}",
+    "ücretsiz çevrim içi dış ticaret eğitimi {ay}",
+    "ihracatçı birlikleri ticaret odası ücretsiz webinar {ay}",
 ]
 TAVILY_TRADE_DATA = [
     "Ticaret Bakanlığı {ay} ayı dış ticaret verileri ihracat ithalat milyar dolar",
@@ -109,6 +113,7 @@ TAVILY_TRADE_DATA = [
 GNEWS_EVENTS = [
     '"ücretsiz" webinar ihracat OR "dış ticaret" OR e-ihracat',
     '"ücretsiz eğitim" ihracat OR "dış ticaret" OR gümrük',
+    'online OR çevrimiçi eğitim ihracat "{ay}"',
 ]
 
 # {ay} yerine bir önceki ayın adı yazılır (ör. "Eylül")
@@ -146,3 +151,6 @@ USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/130.0 Safari/537.36"
 )
+
+# Grafik haberleri (bültendeki iki görselli haber) için kaynak
+CHARTS_FEED = "https://www.visualcapitalist.com/feed/"

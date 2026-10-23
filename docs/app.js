@@ -21,6 +21,7 @@ const ICONS = {
   chevron: '<path d="m9 18 6-6-6-6"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
   ext: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
 };
 
 function icon(name) {
@@ -117,6 +118,11 @@ const dir = (n) => n > 0 ? "up" : n < 0 ? "down" : "";
 
 const DAYS = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
 const MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+function shortDate(iso) {
+  if (!iso) return "";
+  const d = new Date(String(iso).slice(0, 10) + "T12:00:00");
+  return isNaN(d) ? "" : `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
 function longDate(iso) {
   const d = new Date(iso);
   return `${d.getDate()} ${MONTHS[d.getMonth()]} ${DAYS[d.getDay()]}, ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
@@ -144,6 +150,8 @@ const T = {
     const t = doc.trade_data || {};
     return [...tradeCards().map((k) => `${k.label}: ${k.value}`), "", t.summary || ""].join("\n").trim();
   },
+  charts: () => (doc.charts?.items || []).map((c) =>
+    [c.title, c.summary, "Kaynak: www.visualcapitalist.com"].join("\n")).join("\n\n"),
   event: () => {
     const e = doc.event?.selected;
     if (!e) return "";
@@ -160,7 +168,7 @@ const T = {
   },
   all: () => [
     `Haftalık Dış Ticaret Bülteni · ${doc.date_tr} · Sayı: ${doc.issue}`, "",
-    T.wci(), "", T.trade(), "", T.event(), "",
+    T.wci(), "", T.trade(), "", T.charts(), "", T.event(), "",
     "Türkiye ve yurt dışında bu hafta hangi gelişmeler oldu? Birlikte bir göz atalım.", "",
     T.news("tr_news", "1- Türkiye'deki Gelişmeler;"), "",
     T.news("intl_news", "2- Yurt Dışındaki Gelişmeler;"), "", T.week(),
@@ -179,8 +187,9 @@ function checklist() {
     const miss = [t.exports_billion_usd == null && "ihracat", t.imports_billion_usd == null && "ithalat"].filter(Boolean).join(" ve ");
     items.push({ id: "trade", text: `${month} ${miss} rakamı bulunamadı. Resmî kaynaktan bakıp kutuya yazın.`, url: official, cta: "Ticaret Bakanlığı" });
   }
-  if (!e) items.push({ id: "event", text: "Bu hafta otomatik olarak uygun bir ücretsiz etkinlik seçilemedi. Önerilerden birini seçin veya elle yazın." });
-  else if (!e.date || !e.time) items.push({ id: "eventdate", text: "Etkinliğin tarih ve saatini kayıt sayfasından teyit edin.", url: e.register_url || e.source_url, cta: "Etkinlik sayfası" });
+  if (!e) items.push({ id: "event", text: "Bu hafta ileri tarihli, online ve ücretsiz bir etkinlik bulunamadı. Etkinlik bölümüne elle yazın." });
+  else if (!e.time) items.push({ id: "eventdate", text: "Etkinliğin saatini kayıt sayfasından ekleyin.", url: e.register_url || e.source_url, cta: "Etkinlik sayfası" });
+  if ((doc.charts?.items || []).length) items.push({ id: "charts", text: "Grafik haberlerinin görsellerini indirip Canva'ya ekleyin." });
   for (const w of doc.warnings || []) {
     if (/korundu/.test(w)) items.push({ id: `w:${w}`, text: w.replace("bu çalıştırmada üretilemedi; önceki sürüm korundu.", "bu sabah güncellenemedi; bir önceki taslağın metni gösteriliyor.") });
   }
@@ -239,7 +248,7 @@ function spark(hist) {
 function tradeCards() {
   const t = doc.trade_data || {};
   if (!doc.trade_cards) {
-    const fmt = (v) => v != null ? `${Number(v).toLocaleString("tr-TR", { maximumFractionDigits: 3 })} Milyar $` : "";
+    const fmt = (v) => v != null ? `${Number(v).toFixed(3)} Milyar $` : "";
     doc.trade_cards = [
       { label: doc.annual_exports_card?.label || "Yıllık İhracat", value: doc.annual_exports_card?.value || "" },
       { label: `${t.month || ""} Ayı Türkiye İhracatı`.trim(), value: fmt(t.exports_billion_usd) },
@@ -269,41 +278,69 @@ function tradeSection() {
       srcs.map((s) => [" · ", link(s.url, s.source || host(s.url))])));
 }
 
-function eventSection() {
+function chartsSection(no) {
+  const c = doc.charts;
+  if (!c?.items?.length) return section(no, "Grafik Haberleri", null,
+    h("p", { class: "empty" }, "Bu hafta grafik haberi hazırlanamadı. ",
+      link("https://www.visualcapitalist.com/", "Visual Capitalist'i açın ↗")));
+  c.reserve ||= [];
+  const swap = (i, j) => {
+    const [r] = c.reserve.splice(j, 1);
+    const [x] = c.items.splice(i, 1, { ...r, summary: r.summary || "" });
+    c.reserve.unshift(x); save(); render();
+  };
+  return section(no, "Grafik Haberleri", T.charts,
+    h("div", { class: "charts" }, c.items.map((x, i) => h("figure", { class: "chart" },
+      x.image ? h("a", { href: safeUrl(x.image), target: "_blank", rel: "noopener noreferrer", class: "thumb",
+        title: "Görseli tam boyutta aç / indir" }, h("img", { src: safeUrl(x.image), alt: x.original_title || x.title, loading: "lazy" })) : null,
+      h("figcaption", {},
+        editable("div", x, "title", { class: "t" }),
+        editable("p", x, "summary", { class: "s", "data-ph": "Grafiği anlatan kısa paragraf" }),
+        h("div", { class: "src" }, link(x.url, "visualcapitalist.com"),
+          x.image ? [" · ", h("a", { href: safeUrl(x.image), target: "_blank", rel: "noopener noreferrer", download: "" }, "Görseli indir ↗")] : null),
+        c.reserve.length ? h("details", { class: "more inline" },
+          h("summary", {}, icon("chevron"), "Bu grafiği değiştir"),
+          h("ul", {}, c.reserve.map((r, j) => h("li", {},
+            h("div", {}, h("div", {}, r.title), h("div", { class: "src" }, link(r.url, "Grafiği aç ↗"))),
+            h("button", { class: "btn small", type: "button", onclick: () => swap(i, j) }, "Seç"))))) : null)))));
+}
+
+function eventSection(no) {
   doc.event ||= { selected: null, alternatives: [] };
   const ev = doc.event;
   const e = ev.selected;
   const fact = (label, key, ph) => [h("dt", {}, label), h("dd", {}, editable("span", e, key, { "data-ph": ph }))];
-  const pickFrom = (list, isCand) => list.length ? h("details", { class: "more", open: !e },
-    h("summary", {}, icon("chevron"), e ? `Başka bir etkinlik seç (${list.length})` : `Önerilen etkinlikler (${list.length})`),
-    h("ul", {}, list.map((a, i) => h("li", {},
+  const alts = ev.alternatives || [];
+  const pickFrom = alts.length ? h("details", { class: "more", open: !e },
+    h("summary", {}, icon("chevron"), `Başka bir etkinlik seç (${alts.length})`),
+    h("ul", {}, alts.map((a, i) => h("li", {},
       h("div", {}, h("div", {}, a.title), h("div", { class: "src" },
-        [a.organizer, a.date, a.location].filter(Boolean).join(" · "), (a.organizer || a.date || a.location) ? " · " : "",
-        link(a.source_url || a.url, isCand ? sourceName(a) : "Sayfayı aç ↗"))),
+        [a.organizer, a.date, a.time].filter(Boolean).join(" · "), " · ", link(a.source_url, "Sayfayı aç ↗"))),
       h("button", { class: "btn small", type: "button", onclick: () => {
-        const chosen = isCand
-          ? { title: a.title, description: a.snippet || "", date: "", time: "", location: "", fee: "Ücretsiz", register_url: a.url, source_url: a.url }
-          : a;
-        if (!isCand) ev.alternatives.splice(i, 1, ...(e ? [e] : []));
-        ev.selected = chosen; save(); render();
+        ev.alternatives.splice(i, 1, ...(e ? [e] : []));
+        ev.selected = a; save(); render();
       } }, "Seç"))))) : null;
 
-  const alts = ev.alternatives || [];
-  const cands = alts.length ? [] : (doc.candidates?.events || []).slice(0, 6);
-  return section(3, "Haftanın Ücretsiz Etkinlik Duyurusu", e ? T.event : null,
+  const lookup = [["Ticaret Bakanlığı duyuruları", "https://ticaret.gov.tr/duyurular"],
+    ["İTO etkinlikleri", "https://www.ito.org.tr/tr/etkinlikler"]];
+  return section(no, "Haftanın Ücretsiz Etkinlik Duyurusu", e ? T.event : null,
     e ? h("div", {},
       editable("div", e, "title", { class: "event-title", "data-ph": "Etkinlik adı" }),
       editable("p", e, "description", { "data-ph": "Kısa açıklama" }),
       h("dl", { class: "facts" },
         fact("Tarih", "date", "GG.AA.YYYY"), fact("Saat", "time", "SS:SS-SS:SS"),
-        fact("Yer", "location", "Online / şehir"), fact("Ücret", "fee", "Ücretsiz"),
-        fact("Kayıt", "register_url", "Kayıt bağlantısı")))
-      : h("div", { class: "empty" }, "Bu hafta otomatik seçim yapılamadı. Aşağıdan bir etkinlik seçin ya da ",
+        fact("Yer", "location", "Online"), fact("Ücret", "fee", "Ücretsiz"),
+        fact("Kayıt", "register_url", "Kayıt bağlantısı")),
+      e.source_url ? h("div", { class: "meta" }, "Kaynak: ", link(e.source_url, `${e.source || host(e.source_url)} ↗`)) : null)
+      : h("div", { class: "empty" },
+        "Bu hafta ileri tarihli, online ve ücretsiz bir etkinlik bulunamadı. ",
         h("button", { class: "btn small", type: "button", onclick: () => {
-          ev.selected = { title: "", description: "", date: "", time: "", location: "", fee: "Ücretsiz", register_url: "" };
+          ev.selected = { title: "", description: "", date: "", time: "", location: "Online", fee: "Ücretsiz", register_url: "" };
           save(); render();
-        } }, icon("plus"), "Elle yazın"), "."),
-    pickFrom(alts.length ? alts : cands, !alts.length));
+        } }, icon("plus"), "Elle yazın"),
+        h("div", { class: "src", style: "margin-top:8px" }, "Bakılabilecek yerler: ",
+          lookup.map(([t, u], i) => [i ? " · " : "", link(u, `${t} ↗`)]))),
+    pickFrom);
 }
 
 function newsSection(no, key, title, heading) {
@@ -318,7 +355,7 @@ function newsSection(no, key, title, heading) {
     h("ol", { class: "news" }, sec.items.map((x, i) => h("li", {},
       editable("div", x, "title", { class: "t" }),
       editable("div", x, "summary", { class: "s" }),
-      h("div", { class: "src" }, link(x.url, sourceName(x))),
+      h("div", { class: "src" }, link(x.url, sourceName(x)), x.published ? ` · ${shortDate(x.published)}` : ""),
       h("div", { class: "tools" },
         h("button", { class: "tool", type: "button", title: "Yukarı taşı", disabled: i === 0, onclick: () => move(i, -1) }, icon("up")),
         h("button", { class: "tool", type: "button", title: "Aşağı taşı", disabled: i === sec.items.length - 1, onclick: () => move(i, 1) }, icon("down")),
@@ -326,17 +363,17 @@ function newsSection(no, key, title, heading) {
     sec.reserve.length ? h("details", { class: "more" },
       h("summary", {}, icon("chevron"), `Önerilen diğer haberler (${sec.reserve.length})`),
       h("ul", {}, sec.reserve.map((x, i) => h("li", {},
-        h("div", {}, h("div", {}, x.title), h("div", { class: "src" }, link(x.url, sourceName(x)))),
+        h("div", {}, h("div", {}, x.title), h("div", { class: "src" }, link(x.url, sourceName(x)), x.published ? ` · ${shortDate(x.published)}` : "")),
         h("button", { class: "btn small", type: "button", onclick: () => add(i) }, icon("plus"), "Ekle"))))) : null);
 }
 
 function weekSection() {
   const nw = doc.next_week;
   const bigpara = "https://bigpara.hurriyet.com.tr/haberler/gunluk-piyasa-takvimi/gelecek-hafta/";
-  if (!nw) return section(6, "Gelecek Haftanın Bilgilendirmesi", null,
+  if (!nw) return section(7, "Gelecek Haftanın Bilgilendirmesi", null,
     h("p", { class: "empty" }, "Takvim bu hafta hazırlanamadı. ", link(bigpara, "Bigpara takvimini açın ↗")));
-  return section(6, "Gelecek Haftanın Bilgilendirmesi", T.week,
-    h("table", { class: "week" }, h("tbody", {}, (nw.days || []).map((d) => h("tr", {},
+  return section(7, "Gelecek Haftanın Bilgilendirmesi", T.week,
+    h("table", { class: "week" }, h("tbody", {}, (nw.days || []).map((d) => h("tr", { class: d.holiday ? "holiday" : null },
       h("td", {}, h("span", { class: "d" }, (d.date_tr || d.date).replace(/ \d{4}$/, "")), h("span", { class: "w" }, d.weekday || "")),
       h("td", {}, editable("div", d, "text")))))),
     h("div", { class: "meta", style: "margin-top:10px" }, "Kaynak: ", link(bigpara, "Bigpara ekonomik takvim ↗")));
@@ -357,9 +394,10 @@ function render() {
     h("article", { class: "paper" },
       wciSection(),
       tradeSection(),
-      eventSection(),
-      newsSection(4, "tr_news", "Türkiye'deki Gelişmeler", "1- Türkiye'deki Gelişmeler;"),
-      newsSection(5, "intl_news", "Yurt Dışındaki Gelişmeler", "2- Yurt Dışındaki Gelişmeler;"),
+      chartsSection(3),
+      eventSection(4),
+      newsSection(5, "tr_news", "Türkiye'deki Gelişmeler", "1- Türkiye'deki Gelişmeler;"),
+      newsSection(6, "intl_news", "Yurt Dışındaki Gelişmeler", "2- Yurt Dışındaki Gelişmeler;"),
       weekSection()),
     h("p", { class: "foot" }, h("span", { class: "saved" }, "Değişiklikleriniz bu tarayıcıda otomatik kaydedilir.")),
   ].filter(Boolean));
@@ -383,7 +421,7 @@ function actionsUrl() {
 
 const ACTIONS = {
   help: () => dialog("Nasıl kullanılır?", h("ol", {},
-    h("li", {}, "Taslak her cuma sabah 06:30'da kendiliğinden hazırlanır."),
+    h("li", {}, "Taslak her hafta perşembeyi cumaya bağlayan gece kendiliğinden hazırlanır; eksik kalan bölümler sabaha kadar iki kez daha denenir."),
     h("li", {}, "Üstteki sarı kutudaki maddeleri kontrol edip işaretleyin."),
     h("li", {}, "Değiştirmek istediğiniz metne tıklayıp yazın. Haberleri oklarla sıralayabilir, × ile çıkarabilir, “Önerilen diğer haberler”den ekleyebilirsiniz."),
     h("li", {}, "“Bülteni kopyala” ile tüm metni alıp Canva'ya yapıştırın. Tek bir bölüm için o bölümdeki “Kopyala”yı kullanın."))),

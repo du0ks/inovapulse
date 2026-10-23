@@ -26,6 +26,11 @@ Seçim kuralları:
 7. Bölüm ayrımı: "Yurt Dışındaki Gelişmeler" bölümüne Türkiye ile ilgili haber (TCMB, Türkiye'nin
    ihracatı, Türkiye'nin anlaşmaları vb.) ALMA; bunlar Türkiye bölümüne aittir. "Türkiye'deki
    Gelişmeler" bölümü ise Türkiye'yi doğrudan ilgilendiren haberlerden oluşur.
+8. Okunabilir kaynak: okuyucu linke tıklayınca haberin tamamını görebilmeli. Abonelik duvarlı
+   siteleri (Reuters, WSJ, FT, Bloomberg, NYT), sosyal medyayı ve içeriği birkaç satırdan ibaret
+   resmî bildirimleri (ör. WTO bildirim/notification sayfaları) tercih etme; aynı haberin açık
+   erişimli bir kaynağı varsa onu seç.
+9. Tarihi belirsiz veya kapsanan dönemden eski görünen (URL'de eski tarih geçen vb.) haberleri alma.
 
 {STYLE}
 
@@ -104,29 +109,54 @@ Yalnızca şu JSON'u döndür:
 ADAYLAR (id | tarih | kaynak | başlık | özet):
 {candidates}"""
 
-EVENT_SYSTEM = f"""Sen İnovakademi'nin Haftalık Dış Ticaret Bülteni editörüsün. "Haftanın Ücretsiz Etkinlik
-Duyurusu" bölümü için dış ticaret, ihracat, ithalat, sürdürülebilirlik, e-ihracat, finans,
-girişimcilik vb. alanlarda ÜCRETSİZ ve İLERİ TARİHLİ (bugünden sonra) bir etkinlik seçeceksin.
-Tercih: Ticaret Bakanlığı, TİM, TOBB, İhracatçı Birlikleri, Ticaret/Sanayi Odaları, KOSGEB,
-Kalkınma Ajansları, üniversiteler, teknoparklar. Tarih, saat, ücretsiz bilgisi ve kayıt linki
-metinde yoksa null bırak; uydurma.
-Tarihi geçmiş olduğu açıkça belli olan etkinlikleri seçme. Tarihi metinde yazmıyor ama etkinlik
-veya program güncel/başvuruya açık görünüyorsa yine seçebilirsin (date: null); editör teyit edecek.
-Genel kurs siteleri, ücretli sertifika programları ve konu dışı seminerleri seçme.
+CHARTS_SYSTEM = f"""Sen İnovakademi'nin Haftalık Dış Ticaret Bülteni editörüsün. Bültende Visual
+Capitalist'ten iki "grafik haberi" yer alır: bir infografik ve onu anlatan kısa paragraf.
+Örnek:
+Başlık: "2026'da Gelire Göre Dünyanın En Büyük 30 Şirketi"
+Metin: "2026'da gelirlerine göre dünyanın en büyük şirketi, 716,9 milyar dolarlık geliriyle Amazon oldu
+ve Walmart'ın 10 yılı aşkın liderliğini sona erdirdi. Walmart 713,2 milyar dolarla ikinci, Çin merkezli
+State Grid ise 555,4 milyar dolarla üçüncü sırada yer aldı. İlk 30 şirketin yarısı ABD merkezli olurken,
+ABD şirketleri toplam 10,5 trilyon dolarlık gelirin yaklaşık %60'ını oluşturdu."
 
+Seçim: küresel ekonomi, ticaret, ihracat/ithalat, şirketler, emtia, enerji, lojistik, para birimleri,
+büyüme gibi ihracatçıları ilgilendiren konular. Eğitim, sağlık, yaşam maliyeti, üniversite, siyaset,
+spor gibi konu dışı grafikleri seçme. İki grafik farklı konularda olsun.
+{STYLE}
+Metin 60-90 kelime, yalnızca verilen metindeki rakamları kullan."""
+
+CHARTS_USER = """Bugün: {today}. İki grafik seç.
+Yalnızca şu JSON'u döndür:
+{{"items": [{{"id": <aday id>, "title": "Türkçe başlık", "summary": "Bülten paragrafı"}}],
+ "reserve_ids": [<uygun diğer aday id'leri, en fazla 3>]}}
+
+ADAYLAR:
+{candidates}"""
+
+EVENT_SYSTEM = f"""Sen İnovakademi'nin Haftalık Dış Ticaret Bülteni editörüsün. "Haftanın Ücretsiz Etkinlik
+Duyurusu" bölümü için aday sayfaları inceleyip her birinin bilgilerini çıkaracaksın.
+
+Kurallar:
+- Tarihleri YALNIZCA metinde açıkça yazıyorsa ver; yıl yazmıyorsa sayfanın yayın tarihinden çıkar,
+  çıkaramıyorsan null bırak. Tahmin etme.
+- online: etkinlik çevrim içi/online/webinar/Zoom/Teams vb. ise true; fiziksel bir adreste ise false;
+  belli değilse null.
+- free: "ücretsiz", "katılım ücretsizdir" vb. açıkça yazıyorsa true; ücret varsa false; belli değilse null.
+- relevance (1-10): dış ticaret, ihracat, ithalat, gümrük, e-ihracat, devlet destekleri, hedef pazarlar,
+  lojistik, sürdürülebilirlik, finans, girişimcilik konularına yakınlığı. Konu dışı (sürücü eğitimi,
+  kuru temizleme, sağlık mevzuatı vb.) 1-3 puan.
+- Etkinlik olmayan sayfalar (haber, duyuru listesi, genel kurs sitesi) için is_event: false.
 Örnek açıklama: "Eğitim içeriğinde katılımcılara, iletişim becerileri kazandırmayı ve kurum içindeki
 verimlilik ile performansı artırmaya yönelik çözümler sunmayı hedefleyerek, ..."
 {STYLE}"""
 
 EVENT_USER = """Bugün: {today}.
-Bir ana etkinlik ve en fazla 4 alternatif seç. Uygun hiçbir aday yoksa "selected": null döndür.
-Yalnızca şu JSON'u döndür:
-{{"selected": {{"id": <aday id>, "title": "Etkinlik adı", "organizer": "...",
-   "description": "2-3 cümlelik tanıtım", "date": "GG.AA.YYYY veya null", "time": "SS:SS-SS:SS veya null",
-   "location": "Online / şehir", "fee": "Ücretsiz", "register_url": "url veya null"}},
- "alternatives": [ aynı yapı ]}}
+Her aday için bir kayıt döndür. Yalnızca şu JSON'u döndür:
+{{"events": [{{"id": <aday id>, "is_event": true, "title": "Etkinlik adı", "organizer": "...",
+   "description": "2-3 cümlelik Türkçe tanıtım", "start_date": "YYYY-AA-GG veya null",
+   "end_date": "YYYY-AA-GG veya null", "time": "SS:SS-SS:SS veya null", "online": true,
+   "free": true, "relevance": 8, "register_url": "metindeki kayıt linki veya null"}}]}}
 
-ADAYLAR (id | tarih | kaynak | başlık | özet):
+ADAYLAR (id | sayfa tarihi | kaynak | başlık | sayfa metni):
 {candidates}"""
 
 CAL_SYSTEM = """Sen İnovakademi'nin Haftalık Dış Ticaret Bülteni editörüsün. "Gelecek Haftanın

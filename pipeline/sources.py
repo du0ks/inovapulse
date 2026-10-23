@@ -375,17 +375,190 @@ def resolve_gnews(url):
         return url
 
 
-def article_text(url, limit=3500):
-    """Haber sayfasından düz metin çıkarır (en iyi çaba)."""
+PAYWALLED = re.compile(r"reuters\.com|wsj\.com|ft\.com|bloomberg\.com|nytimes\.com|economist\.com|"
+                       r"barrons\.com|washingtonpost\.com|instagram\.com|facebook\.com|x\.com|twitter\.com|"
+                       r"linkedin\.com|youtube\.com|tiktok\.com")
+
+
+def article_info(url):
+    """Haber sayfasının ana metnini ve yayın tarihini çıkarır (en iyi çaba).
+    Dönüş: {"text": str, "date": "YYYY-AA-GG" | None, "status": http kodu | None}"""
+    import trafilatura
+
+    info = {"text": "", "date": None, "status": None}
     if not url or "news.google.com" in url:
-        return ""
+        return info
     try:
-        if "ticaret.gov.tr/haberler/" in url:
-            return ticaret_article(url)[2][:limit]
+        if re.search(r"ticaret\.gov\.tr/(haberler|duyurular)/", url):
+            _, pub, body = ticaret_article(url)
+            return {"text": body, "date": pub.date().isoformat() if pub else None, "status": 200}
         r = session.get(url, timeout=20)
+        info["status"] = r.status_code
         r.raise_for_status()
     except Exception:
-        return ""
-    paras = re.findall(r"<p[^>]*>(.*?)</p>", r.text, flags=re.S)
-    text = " ".join(clean_text(p, 2000) for p in paras)
-    return re.sub(r"\s+", " ", text)[:limit]
+        return info
+    try:
+        ex = trafilatura.bare_extraction(r.text, url=url, with_metadata=True, favor_precision=True)
+        ex = ex.as_dict() if hasattr(ex, "as_dict") else (ex or {})
+    except Exception:
+        ex = {}
+    text = ex.get("text") or ""
+    if not text:
+        paras = re.findall(r"<p[^>]*>(.*?)</p>", r.text, flags=re.S)
+        text = " ".join(clean_text(p, 2000) for p in paras)
+    info["text"] = re.sub(r"\s+", " ", text).strip()
+    info["date"] = ex.get("date")
+    return info
+
+
+def article_text(url, limit=3500):
+    return article_info(url)["text"][:limit]
+
+
+# --- Ticaret Bakanlığı aylık dış ticaret verisi -----------------------------
+
+MONTH_SLUGS = ["ocak", "subat", "mart", "nisan", "mayis", "haziran", "temmuz", "agustos",
+               "eylul", "ekim", "kasim", "aralik"]
+
+
+def _tr_amount(s):
+    """'25 milyar 976 milyon' → 25.976 (milyar $)"""
+    m = re.match(r"(\d+)\s*milyar(?:\s*(\d+)\s*milyon)?", s.strip())
+    if not m:
+        return None
+    return int(m.group(1)) + int(m.group(2) or 0) / 1000
+
+
+def _trade_figures(block):
+    out = {}
+    for key, word in (("exports", "İhracat"), ("imports", "İthalat"), ("volume", "Dış ticaret hacmi")):
+        m = re.search(word + r",?\s*%(-?[\d,]+)\s*oranında\s*(artarak|azalarak)\s*([^,]+?dolar)", block)
+        if m:
+            pct = float(m.group(1).replace(",", "."))
+            out[key] = {"billion_usd": _tr_amount(m.group(3)),
+                        "yoy_pct": -pct if m.group(2) == "azalarak" else pct}
+    return out
+
+
+def fetch_trade_month(y, m):
+    url = f"https://ticaret.gov.tr/haberler/{y}-yili-{MONTH_SLUGS[m - 1]}-ayi-dis-ticaret-verileri"
+    try:
+        _, pub, body = ticaret_article(url)
+    except Exception:
+        return None
+    month_name = list(TR_MONTHS)[m - 1]
+    split = re.search(r"Ocak\s*-\s*" + month_name + r"\s*döneminde", body or "")
+    monthly = _trade_figures(body[:split.start()] if split else body or "")
+    if "exports" not in monthly:
+        return None
+    return {"year": y, "month_num": m, "month": month_name, "url": url,
+            "published": pub.isoformat() if pub else None, "text": body,
+            "monthly": monthly, "ytd": _trade_figures(body[split.start():]) if split else {}}
+
+
+def fetch_trade_official(today, back=3):
+    """Ticaret Bakanlığı'nın '<yıl> Yılı <Ay> Ayı Dış Ticaret Verileri' haberini bulur ve
+    rakamları doğrudan metinden okur (LLM'e gerek yok). Ayrıca önceki yılın toplam ihracatını ekler."""
+    first = today.replace(day=1)
+    res = None
+    for k in range(1, back + 1):
+        y, m = first.year, first.month - k
+        while m < 1:
+            y, m = y - 1, m + 12
+        res = fetch_trade_month(y, m)
+        if res:
+            break
+    if not res:
+        log("  ! Ticaret Bakanlığı aylık dış ticaret verisi bulunamadı")
+        return None
+    log(f"  Ticaret Bakanlığı dış ticaret verisi: {res['month']} {res['year']}")
+    for y in (today.year - 1, today.year - 2):
+        dec = res if (res["year"], res["month_num"]) == (y, 12) else fetch_trade_month(y, 12)
+        if dec and dec["ytd"].get("exports"):
+            res["annual"] = {"year": y, "exports_billion_usd": dec["ytd"]["exports"]["billion_usd"],
+                             "url": dec["url"]}
+            break
+    return res
+
+
+# --- Grafik haberleri (Visual Capitalist) -----------------------------------
+
+def fetch_charts(since, pages=2):
+    out, seen = [], set()
+    for page in range(1, pages + 1):
+        url = config.CHARTS_FEED + (f"?paged={page}" if page > 1 else "")
+        try:
+            r = session.get(url, headers={"Accept": "application/rss+xml,text/xml"}, timeout=30)
+            r.raise_for_status()
+        except Exception as ex:
+            log(f"  ! Grafik akışı: {ex}")
+            break
+        for e in feedparser.parse(r.content).entries:
+            ts = _entry_time(e)
+            if (ts and ts < since) or e.link in seen:
+                continue
+            seen.add(e.link)
+            content = (e.get("content") or [{}])[0].get("value", "")
+            imgs = [m.get("url") for m in e.get("media_content") or [] if m.get("url")]
+            imgs += [u for u in re.findall(r'<img[^>]+src="([^"]+/wp-content/uploads/[^"]+)"', content)]
+            out.append({
+                "title": clean_text(e.title, 300),
+                "url": e.link,
+                "source": "www.visualcapitalist.com",
+                "published": ts.isoformat() if ts else None,
+                "tags": [t.term for t in e.get("tags", [])][:8],
+                "snippet": clean_text(e.get("summary", ""), 400),
+                "text": clean_text(content, 3000),
+                "image": imgs[0] if imgs else None,
+            })
+    log(f"  Grafik haberleri: {len(out)}")
+    return out
+
+
+# --- Ücretsiz etkinlik ilanları (tarihli listeler) ---------------------------
+
+EVENT_WORDS = re.compile(r"eğitim|webinar|webinar|seminer|toplantı|sohbet|program|etkinlik|zirve|"
+                         r"konferans|panel|çalıştay|bilgilendirme", re.I)
+
+
+def fetch_event_listings():
+    """Tarih bilgisi açıkça verilen resmî etkinlik listeleri."""
+    out = []
+    # Ticaret Bakanlığı duyuruları (eğitim programları, ticaret müşavirleriyle çevrim içi toplantılar)
+    for page in (1, 2):
+        try:
+            d = session.get("https://ticaret.gov.tr/duyurular" + (f"?page={page}" if page > 1 else ""),
+                            timeout=25).text
+        except Exception as ex:
+            log(f"  ! Ticaret duyuruları: {ex}")
+            break
+        for href, title in re.findall(r'<a href="([^"]+)"[^>]*>\s*(?:<[^>]+>\s*)*?<h5>(.*?)</h5>', d, flags=re.S):
+            title = clean_text(title, 300)
+            if not EVENT_WORDS.search(title):
+                continue
+            url = href if href.startswith("http") else "https://ticaret.gov.tr" + href
+            out.append({"title": title, "url": url, "source": "T.C. Ticaret Bakanlığı",
+                        "published": None, "snippet": "", "region": "tr"})
+    # İstanbul Ticaret Odası etkinlikleri
+    try:
+        d = session.get("https://www.ito.org.tr/tr/etkinlikler", timeout=25).text
+        for href, when, title in re.findall(
+                r'<a href="(/tr/etkinlikler/detay/[^"?]+)[^"]*" class="list-box">.*?<time>(.*?)</time>.*?<h4>(.*?)</h4>',
+                d, flags=re.S):
+            out.append({"title": clean_text(title, 300), "url": "https://www.ito.org.tr" + href,
+                        "source": "İstanbul Ticaret Odası", "published": None,
+                        "snippet": "Tarih: " + clean_text(when, 100), "region": "tr"})
+    except Exception as ex:
+        log(f"  ! İTO etkinlikleri: {ex}")
+    log(f"  Etkinlik ilanları: {len(out)}")
+    return out
+
+
+# --- Resmî tatiller ----------------------------------------------------------
+
+def tr_holidays(days):
+    import holidays
+
+    years = sorted({date.fromisoformat(d).year for d in days})
+    h = holidays.Turkey(years=years, language="tr", categories=("public", "half_day"))
+    return {d.isoformat(): name for d, name in h.items() if d.isoformat() in days}
