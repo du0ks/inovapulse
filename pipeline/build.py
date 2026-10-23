@@ -296,8 +296,8 @@ def build_event(candidates, today):
     def enrich(c):
         c["url"] = resolve_gnews(c["url"])
         info = article_info(c["url"])
-        if len(info["text"]) < 400:
-            info["text"] = page_text(c["url"])
+        # Tarih/saat/ücret bilgisi çoğu zaman ana metnin dışında (başlık kutusunda) durur
+        info["text"] = (info["text"][:1000] + " … " + page_text(c["url"], 1200)).strip(" …")
         c["page_date"] = info["date"]
         if len(info["text"]) > len(c.get("snippet") or ""):
             c["snippet"] = ((c.get("snippet") or "") + " " + info["text"]).strip()
@@ -310,7 +310,7 @@ def build_event(candidates, today):
     candidates = [c for c in candidates if not (c.get("page_date") and c["page_date"] < old)]
     lines = "\n".join(
         f"{i} | {c.get('page_date') or (c.get('published') or '')[:10] or '-'} | {c['source']} | {c['title']} | "
-        f"{(c.get('snippet') or '')[:900]}" for i, c in enumerate(candidates))
+        f"{(c.get('snippet') or '')[:2000]}" for i, c in enumerate(candidates))
 
     def check(o):
         if not isinstance(o.get("events"), list):
@@ -332,6 +332,7 @@ def build_event(candidates, today):
         start, end = x.get("start_date") or None, x.get("end_date") or None
         last = end or start
         why = (None if last and last >= t else "tarih yok/geçmiş") or \
+              (None if not start or start >= t else "başlamış/devam eden program") or \
               (None if (start or last) <= limit else "çok ileri tarih") or \
               (None if x.get("online") is True else "çevrim içi değil") or \
               (None if x.get("free") is True else "ücretsiz değil") or \
@@ -353,8 +354,10 @@ def build_event(candidates, today):
             "register_url": x.get("register_url") or c["url"], "source_url": c["url"], "source": c["source"],
             "relevance": x.get("relevance"),
         })
-    # En ilgili ve en yakın tarihli etkinlik önce
-    ok.sort(key=lambda e: (-(e["relevance"] or 0), e["start_date"] or e["end_date"]))
+    # Önce önümüzdeki 3 hafta içindekiler, sonra en ilgili, sonra en yakın tarihli
+    soon = (today + timedelta(days=21)).isoformat()
+    ok.sort(key=lambda e: ((e["start_date"] or e["end_date"]) > soon, -(e["relevance"] or 0),
+                           e["start_date"] or e["end_date"]))
     return {"selected": ok[0] if ok else None, "alternatives": ok[1:5]}
 
 
