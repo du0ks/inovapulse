@@ -14,8 +14,16 @@ import requests
 
 from . import config
 
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
 session = requests.Session()
 session.headers["User-Agent"] = config.USER_AGENT
+# Geçici DNS/bağlantı hatalarında ve 5xx yanıtlarda birkaç kez yeniden dene
+_retry = Retry(total=4, connect=4, read=2, backoff_factor=3, status_forcelist=[502, 503, 504],
+               allowed_methods=["GET"])
+session.mount("https://", HTTPAdapter(max_retries=_retry))
+session.mount("http://", HTTPAdapter(max_retries=_retry))
 
 
 def log(msg):
@@ -411,6 +419,17 @@ def article_info(url):
     return info
 
 
+def page_text(url, limit=4000):
+    """Sayfanın tüm görünür metni (ana metin çıkarılamayan etkinlik sayfaları için)."""
+    try:
+        r = session.get(url, timeout=20)
+        r.raise_for_status()
+    except Exception:
+        return ""
+    t = re.sub(r"<(nav|header|footer)\b.*?</\1>", " ", r.text, flags=re.S | re.I)
+    return re.sub(r"\s+", " ", _html_to_text(t)).strip()[:limit]
+
+
 def article_text(url, limit=3500):
     return article_info(url)["text"][:limit]
 
@@ -441,11 +460,14 @@ def _trade_figures(block):
 
 
 def fetch_trade_month(y, m):
+    """Ay verisi yoksa None döner; ağ hatasında istisna fırlatır (eski aya düşülmesin diye)."""
     url = f"https://ticaret.gov.tr/haberler/{y}-yili-{MONTH_SLUGS[m - 1]}-ayi-dis-ticaret-verileri"
     try:
         _, pub, body = ticaret_article(url)
-    except Exception:
-        return None
+    except requests.HTTPError as ex:
+        if ex.response is not None and ex.response.status_code == 404:
+            return None
+        raise
     month_name = list(TR_MONTHS)[m - 1]
     split = re.search(r"Ocak\s*-\s*" + month_name + r"\s*döneminde", body or "")
     monthly = _trade_figures(body[:split.start()] if split else body or "")
@@ -473,7 +495,10 @@ def fetch_trade_official(today, back=3):
         return None
     log(f"  Ticaret Bakanlığı dış ticaret verisi: {res['month']} {res['year']}")
     for y in (today.year - 1, today.year - 2):
-        dec = res if (res["year"], res["month_num"]) == (y, 12) else fetch_trade_month(y, 12)
+        try:
+            dec = res if (res["year"], res["month_num"]) == (y, 12) else fetch_trade_month(y, 12)
+        except Exception:
+            dec = None
         if dec and dec["ytd"].get("exports"):
             res["annual"] = {"year": y, "exports_billion_usd": dec["ytd"]["exports"]["billion_usd"],
                              "url": dec["url"]}
@@ -539,6 +564,17 @@ def fetch_event_listings():
             url = href if href.startswith("http") else "https://ticaret.gov.tr" + href
             out.append({"title": title, "url": url, "source": "T.C. Ticaret Bakanlığı",
                         "published": None, "snippet": "", "region": "tr"})
+    # Uludağ İhracatçı Birlikleri Akademi: gelecek online eğitimler (çoğu ücretsiz)
+    try:
+        d = session.get("https://uib.org.tr/tr/akademi-egitimler", timeout=25).text
+        for m in re.finditer(r'<a href="(/tr/akademi-egitim-[^"]+)" title="([^"]+)"', d):
+            start = d.find(">", m.end()) + 1
+            info = clean_text(d[start:start + 2500], 200)
+            out.append({"title": clean_text(m.group(2), 300), "url": "https://uib.org.tr" + m.group(1),
+                        "source": "Uludağ İhracatçı Birlikleri", "published": None,
+                        "snippet": info, "region": "tr"})
+    except Exception as ex:
+        log(f"  ! UİB Akademi: {ex}")
     # İstanbul Ticaret Odası etkinlikleri
     try:
         d = session.get("https://www.ito.org.tr/tr/etkinlikler", timeout=25).text

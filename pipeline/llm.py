@@ -132,7 +132,7 @@ def _gemini(model, system, user, max_tokens):
     }
     for attempt in range(3):
         # Anahtar URL'de değil başlıkta: hata mesajlarına/loglara sızmasın
-        r = requests.post(url, headers={"x-goog-api-key": key}, json=body, timeout=300)
+        r = requests.post(url, headers={"x-goog-api-key": key}, json=body, timeout=150)
         if r.status_code == 429 and "PerDay" in r.text:
             raise QuotaExhausted(f"{model}: günlük ücretsiz kota doldu")
         if r.status_code in (429, 500, 503) and attempt < 2:

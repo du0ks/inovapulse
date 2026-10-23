@@ -12,7 +12,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from . import config, llm, prompts
 from .sources import (
-    PAYWALLED, article_info, article_text, dedupe, fetch_bigpara, fetch_charts, fetch_drewry,
+    PAYWALLED, article_info, article_text, page_text, dedupe, fetch_bigpara, fetch_charts, fetch_drewry,
     fetch_event_listings, fetch_gnews, fetch_rss, fetch_tavily, fetch_ticaret, fetch_trade_official,
     issue_number, log, resolve_gnews, shortlist_calendar, tr_holidays,
 )
@@ -274,11 +274,13 @@ def build_charts(cands, today):
 def build_event(candidates, today):
     """Adayların sayfalarını açar, LLM ile tarih/online/ücret bilgisini çıkarır ve kuralları kodla
     uygular: ileri tarihli, çevrim içi ve ücretsiz olmayan hiçbir etkinlik seçilmez."""
-    candidates = [dict(c) for c in candidates[:30]]
+    candidates = [dict(c) for c in candidates[:40]]
 
     def enrich(c):
         c["url"] = resolve_gnews(c["url"])
         info = article_info(c["url"])
+        if len(info["text"]) < 400:
+            info["text"] = page_text(c["url"])
         c["page_date"] = info["date"]
         if len(info["text"]) > len(c.get("snippet") or ""):
             c["snippet"] = ((c.get("snippet") or "") + " " + info["text"]).strip()
