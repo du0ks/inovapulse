@@ -292,7 +292,7 @@ function chartsSection(no) {
   return section(no, "Grafik Haberleri", T.charts,
     h("div", { class: "charts" }, c.items.map((x, i) => h("figure", { class: "chart" },
       x.image ? h("a", { href: safeUrl(x.image), target: "_blank", rel: "noopener noreferrer", class: "thumb",
-        title: "Görseli tam boyutta aç / indir" }, h("img", { src: safeUrl(x.image), alt: x.original_title || x.title, loading: "lazy" })) : null,
+        title: "Görseli tam boyutta aç / indir" }, h("img", { src: safeUrl(x.image), alt: x.original_title || x.title, referrerpolicy: "no-referrer" })) : null,
       h("figcaption", {},
         editable("div", x, "title", { class: "t" }),
         editable("p", x, "summary", { class: "s", "data-ph": "Grafiği anlatan kısa paragraf" }),

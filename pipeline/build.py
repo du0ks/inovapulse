@@ -271,10 +271,27 @@ def build_charts(cands, today):
     return {"items": items, "reserve": reserve}
 
 
+def dates_in(text):
+    """Metindeki '27 Ekim 2026' ve '27.10.2026' biçimli tarihler."""
+    out = []
+    for d, m, y in re.findall(r"(\d{1,2})\s+(" + "|".join(MONTHS) + r")\s+(20\d\d)", text or ""):
+        out.append(date(int(y), MONTHS.index(m) + 1, int(d)))
+    for d, m, y in re.findall(r"\b(\d{1,2})[./](\d{1,2})[./](20\d\d)\b", text or ""):
+        try:
+            out.append(date(int(y), int(m), int(d)))
+        except ValueError:
+            pass
+    return out
+
+
 def build_event(candidates, today):
     """Adayların sayfalarını açar, LLM ile tarih/online/ücret bilgisini çıkarır ve kuralları kodla
     uygular: ileri tarihli, çevrim içi ve ücretsiz olmayan hiçbir etkinlik seçilmez."""
-    candidates = [dict(c) for c in candidates[:40]]
+    # Başlık/özetteki tarihlerin hepsi geçmişteyse etkinlik bitmiştir; LLM'e hiç gönderme
+    def past(c):
+        ds = dates_in(f"{c['title']} {c.get('snippet') or ''}")
+        return bool(ds) and max(ds) < today
+    candidates = [dict(c) for c in candidates if not past(c)][:35]
 
     def enrich(c):
         c["url"] = resolve_gnews(c["url"])
@@ -293,11 +310,13 @@ def build_event(candidates, today):
     candidates = [c for c in candidates if not (c.get("page_date") and c["page_date"] < old)]
     lines = "\n".join(
         f"{i} | {c.get('page_date') or (c.get('published') or '')[:10] or '-'} | {c['source']} | {c['title']} | "
-        f"{(c.get('snippet') or '')[:1300]}" for i, c in enumerate(candidates))
+        f"{(c.get('snippet') or '')[:900]}" for i, c in enumerate(candidates))
 
     def check(o):
         if not isinstance(o.get("events"), list):
             raise ValueError("'events' listesi yok")
+        if len(o["events"]) < len(candidates) // 2:
+            raise ValueError(f"adayların çoğu değerlendirilmedi ({len(o['events'])}/{len(candidates)})")
         llm.require_turkish([x.get("description") for x in o["events"] if x.get("is_event")] or ["ş"])
 
     out = llm.ask_json(prompts.EVENT_SYSTEM, prompts.EVENT_USER.format(today=today, candidates=lines),
