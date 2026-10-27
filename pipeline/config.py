@@ -10,9 +10,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "docs" / "data"
 
-# Bülten sayı numarası: 21.08.2026 = 205. Her hafta +1.
-ISSUE_ANCHOR_DATE = "2026-08-21"
-ISSUE_ANCHOR_NUMBER = 205
+# Bülten sayı numarası: 23.10.2026 = 213 (yayımlanmış bülten). Her hafta +1.
+# Yayın atlanan bir hafta olursa buradaki tarih/numara son yayımlanan sayıya göre güncellenir.
+ISSUE_ANCHOR_DATE = "2026-10-23"
+ISSUE_ANCHOR_NUMBER = 213
 
 LOOKBACK_DAYS = 7
 

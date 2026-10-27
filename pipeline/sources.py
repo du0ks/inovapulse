@@ -177,7 +177,10 @@ def _html_to_text(d):
 def fetch_drewry():
     r = session.get(config.DREWRY_URL, timeout=40)
     r.raise_for_status()
-    d = r.text
+    return parse_drewry(r.text)
+
+
+def parse_drewry(d):
     t = _html_to_text(d)
     start = t.find("Our detailed assessment for")
     end = t.find("Spot freight rates by major route", start)
@@ -524,8 +527,15 @@ def fetch_charts(since, pages=2):
                 continue
             seen.add(e.link)
             content = (e.get("content") or [{}])[0].get("value", "")
-            imgs = [m.get("url") for m in e.get("media_content") or [] if m.get("url")]
-            imgs += [u for u in re.findall(r'<img[^>]+src="([^"]+/wp-content/uploads/[^"]+)"', content)]
+            share = [m.get("url") for m in e.get("media_content") or [] if m.get("url")]
+            # Bültende infografiğin kendisi (genelde dikey) kullanılır; yoksa paylaşım görseli
+            main = []
+            for tag in re.findall(r"<img[^>]+>", content):
+                src = re.search(r'src="([^"]+/wp-content/uploads/[^"]+)"', tag)
+                w = re.search(r'width="(\d+)"', tag)
+                if src and w and int(w.group(1)) >= 600 and "logo" not in src.group(1):
+                    main.append(html.unescape(src.group(1)))
+            imgs = main + share
             out.append({
                 "title": clean_text(e.title, 300),
                 "url": e.link,
@@ -535,6 +545,7 @@ def fetch_charts(since, pages=2):
                 "snippet": clean_text(e.get("summary", ""), 400),
                 "text": clean_text(content, 3000),
                 "image": imgs[0] if imgs else None,
+                "image_share": share[0] if share else None,
             })
     log(f"  Grafik haberleri: {len(out)}")
     return out
@@ -596,5 +607,5 @@ def tr_holidays(days):
     import holidays
 
     years = sorted({date.fromisoformat(d).year for d in days})
-    h = holidays.Turkey(years=years, language="tr", categories=("public", "half_day"))
+    h = holidays.Turkey(years=years, language="tr")
     return {d.isoformat(): name for d, name in h.items() if d.isoformat() in days}

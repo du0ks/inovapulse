@@ -255,6 +255,8 @@ def build_charts(cands, today):
     def check(o):
         if len(o.get("items") or []) < 2:
             raise ValueError("iki grafik seçilmedi")
+        if any(len(x.get("summary") or "") < 150 for x in o["items"]):
+            raise ValueError("grafik metni boş veya çok kısa")
         llm.require_turkish([x.get("summary") for x in o["items"]] + [x.get("title") for x in o["items"]])
 
     out = llm.ask_json(prompts.CHARTS_SYSTEM, prompts.CHARTS_USER.format(today=today, candidates=lines),
@@ -263,6 +265,7 @@ def build_charts(cands, today):
     def card(c, x=None):
         return {"title": (x or {}).get("title") or c["title"], "summary": (x or {}).get("summary", ""),
                 "original_title": c["title"], "url": c["url"], "image": c.get("image"),
+                "image_share": c.get("image_share"),
                 "source": c["source"], "published": c.get("published")}
 
     items = [card(pick(cands, x.get("id")), x) for x in out["items"] if pick(cands, x.get("id"))][:2]
@@ -396,12 +399,7 @@ def add_holidays(out, days):
         if not d:
             d = {"date": day, "text": ""}
             out.setdefault("days", []).append(d)
-        m = re.match(r"(.+?) \(saat ([\d.]+)'ten\)", name)
-        if m:  # arife: yarım gün
-            d["text"] = (d["text"] + f" {m.group(1)} arifesi nedeniyle saat {m.group(2)}'ten itibaren "
-                         "yarım gün tatil.").strip()
-        else:
-            d["text"] = f"{name} nedeniyle resmî tatil."
+        d["text"] = name
         d["holiday"] = name
     out["days"] = sorted(out.get("days", []), key=lambda d: d.get("date") or "")
 

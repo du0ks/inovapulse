@@ -77,7 +77,8 @@ function sourceName(x) {
 
 let saveTimer;
 function save() {
-  try { localStorage.setItem(storeKey, JSON.stringify(doc)); } catch {}
+  try { localStorage.setItem(storeKey, JSON.stringify(doc)); }
+  catch { toast("Değişiklik kaydedilemedi: tarayıcı deposu dolu (büyük görselleri kaldırmayı deneyin)."); return; }
   const el = $(".saved");
   if (el) {
     el.textContent = "Kaydedildi";
@@ -189,7 +190,7 @@ function checklist() {
   }
   if (!e) items.push({ id: "event", text: "Bu hafta ileri tarihli, online ve ücretsiz bir etkinlik bulunamadı. Etkinlik bölümüne elle yazın." });
   else if (!e.time) items.push({ id: "eventdate", text: "Etkinliğin saatini kayıt sayfasından ekleyin.", url: e.register_url || e.source_url, cta: "Etkinlik sayfası" });
-  if ((doc.charts?.items || []).length) items.push({ id: "charts", text: "Grafik haberlerinin görsellerini indirip Canva'ya ekleyin." });
+  items.push({ id: "podcast", text: "Bu haftanın podcast görselini Podcast bölümünden yükleyin (yüklemezseniz son yüklenen kullanılır)." });
   for (const w of doc.warnings || []) {
     if (/korundu/.test(w)) items.push({ id: `w:${w}`, text: w.replace("bu çalıştırmada üretilemedi; önceki sürüm korundu.", "bu sabah güncellenemedi; bir önceki taslağın metni gösteriliyor.") });
   }
@@ -226,6 +227,11 @@ function wciSection() {
       h("tr", {}, h("td", {}, r.route), h("td", {}, `${num(r.usd_40ft)} $`),
         h("td", { class: dir(r.change_pct) }, pct(r.change_pct)))))) : null,
     history.length > 2 ? spark(history) : null,
+    h("div", { class: "img-tools" },
+      w.chart_image ? [h("img", { class: "mini", src: w.chart_image, alt: "" }), "PDF'te yüklediğiniz grafik kullanılacak. ",
+        h("button", { class: "btn small", type: "button", onclick: () => { delete w.chart_image; save(); render(); } }, "Otomatik grafiğe dön")]
+        : ["PDF'teki grafik son 12 ayın verisinden otomatik çizilir. ",
+          uploadButton("Drewry grafiği yükle", (img) => { w.chart_image = img; save(); render(); })]),
     h("div", { class: "meta" },
       `${w.assessment_date ? new Date(w.assessment_date).toLocaleDateString("tr-TR", { day: "numeric", month: "long" }) + " değerlendirmesi · " : ""}`,
       link(view, "Drewry grafiğini aç ↗")));
@@ -291,13 +297,13 @@ function chartsSection(no) {
   };
   return section(no, "Grafik Haberleri", T.charts,
     h("div", { class: "charts" }, c.items.map((x, i) => h("figure", { class: "chart" },
-      x.image ? h("a", { href: safeUrl(x.image), target: "_blank", rel: "noopener noreferrer", class: "thumb",
-        title: "Görseli tam boyutta aç / indir" }, h("img", { src: safeUrl(x.image), alt: x.original_title || x.title, referrerpolicy: "no-referrer" })) : null,
+      x.image ? h("div", { class: "thumb" }, h("img", { src: x.image.startsWith("data:") ? x.image : safeUrl(x.image),
+        alt: x.original_title || x.title, referrerpolicy: "no-referrer" })) : null,
       h("figcaption", {},
         editable("div", x, "title", { class: "t" }),
         editable("p", x, "summary", { class: "s", "data-ph": "Grafiği anlatan kısa paragraf" }),
-        h("div", { class: "src" }, link(x.url, "visualcapitalist.com"),
-          x.image ? [" · ", h("a", { href: safeUrl(x.image), target: "_blank", rel: "noopener noreferrer", download: "" }, "Görseli indir ↗")] : null),
+        h("div", { class: "src" }, link(x.url, "visualcapitalist.com"), " · ",
+          uploadButton("Görseli değiştir", (img) => { x.image = img; save(); render(); })),
         c.reserve.length ? h("details", { class: "more inline" },
           h("summary", {}, icon("chevron"), "Bu grafiği değiştir"),
           h("ul", {}, c.reserve.map((r, j) => h("li", {},
@@ -343,6 +349,22 @@ function eventSection(no) {
     pickFrom);
 }
 
+function podcastSection(no) {
+  const pod = podcast();
+  return section(no, "İhracat Muhabbetleri Podcast", null,
+    h("div", { class: "pod" },
+      pod?.image ? h("img", { class: "pod-img", src: pod.image, alt: "Podcast görseli" }) : h("div", { class: "empty" }, "Henüz podcast görseli yüklenmedi."),
+      h("div", {},
+        h("p", { class: "meta", style: "margin-top:0" }, pod?.updated
+          ? `Son yükleme: ${longDate(pod.updated)}. Bu görsel siz değiştirene kadar her hafta kullanılır.`
+          : "Yüklenen görsel bu tarayıcıda saklanır ve siz değiştirene kadar her hafta kullanılır."),
+        uploadButton(pod?.image ? "Yeni bölüm görseli yükle" : "Görsel yükle", (img) => {
+          try { localStorage.setItem(PODCAST_KEY, JSON.stringify({ image: img, updated: new Date().toISOString() })); }
+          catch { toast("Görsel kaydedilemedi: tarayıcı deposu dolu."); return; }
+          render(); toast("Podcast görseli kaydedildi.");
+        }))));
+}
+
 function newsSection(no, key, title, heading) {
   const sec = doc[key];
   if (!sec) return section(no, title, null, h("p", { class: "empty" }, "Bu bölüm bu hafta hazırlanamadı."));
@@ -370,9 +392,9 @@ function newsSection(no, key, title, heading) {
 function weekSection() {
   const nw = doc.next_week;
   const bigpara = "https://bigpara.hurriyet.com.tr/haberler/gunluk-piyasa-takvimi/gelecek-hafta/";
-  if (!nw) return section(7, "Gelecek Haftanın Bilgilendirmesi", null,
+  if (!nw) return section(8, "Gelecek Haftanın Bilgilendirmesi", null,
     h("p", { class: "empty" }, "Takvim bu hafta hazırlanamadı. ", link(bigpara, "Bigpara takvimini açın ↗")));
-  return section(7, "Gelecek Haftanın Bilgilendirmesi", T.week,
+  return section(8, "Gelecek Haftanın Bilgilendirmesi", T.week,
     h("table", { class: "week" }, h("tbody", {}, (nw.days || []).map((d) => h("tr", { class: d.holiday ? "holiday" : null },
       h("td", {}, h("span", { class: "d" }, (d.date_tr || d.date).replace(/ \d{4}$/, "")), h("span", { class: "w" }, d.weekday || "")),
       h("td", {}, editable("div", d, "text")))))),
@@ -386,7 +408,15 @@ function render() {
   const issueNo = String(doc.issue || "").split("/").pop().trim();
   app.replaceChildren(...[
     h("div", { class: "intro" },
-      h("h1", {}, doc.date_tr, " ", h("span", { class: "issue-no" }, `· Sayı ${issueNo}`)),
+      h("h1", {}, doc.date_tr, " ", h("span", { class: "issue-no" }, "· Sayı ",
+        (() => {
+          const el = h("span", { contenteditable: "plaintext-only", class: "issue-edit", title: "Sayı numarasını düzeltmek için tıklayın" }, issueNo);
+          el.addEventListener("input", () => {
+            const n = el.innerText.replace(/\D/g, "");
+            if (n) { doc.issue = `${String(doc.issue || doc.date).slice(0, 4)} / ${n}`; save(); }
+          });
+          return el;
+        })())),
       h("p", {}, isLatest
         ? `Taslak ${longDate(doc.generated_at)} itibarıyla hazırlandı. Metinlere tıklayarak düzenleyebilirsiniz.`
         : "Geçmiş bir bülteni görüntülüyorsunuz.")),
@@ -396,8 +426,9 @@ function render() {
       tradeSection(),
       chartsSection(3),
       eventSection(4),
-      newsSection(5, "tr_news", "Türkiye'deki Gelişmeler", "1- Türkiye'deki Gelişmeler;"),
-      newsSection(6, "intl_news", "Yurt Dışındaki Gelişmeler", "2- Yurt Dışındaki Gelişmeler;"),
+      podcastSection(5),
+      newsSection(6, "tr_news", "Türkiye'deki Gelişmeler", "1- Türkiye'deki Gelişmeler;"),
+      newsSection(7, "intl_news", "Yurt Dışındaki Gelişmeler", "2- Yurt Dışındaki Gelişmeler;"),
       weekSection()),
     h("p", { class: "foot" }, h("span", { class: "saved" }, "Değişiklikleriniz bu tarayıcıda otomatik kaydedilir.")),
   ].filter(Boolean));
@@ -424,7 +455,9 @@ const ACTIONS = {
     h("li", {}, "Taslak her hafta perşembeyi cumaya bağlayan gece kendiliğinden hazırlanır; eksik kalan bölümler sabaha kadar iki kez daha denenir."),
     h("li", {}, "Üstteki sarı kutudaki maddeleri kontrol edip işaretleyin."),
     h("li", {}, "Değiştirmek istediğiniz metne tıklayıp yazın. Haberleri oklarla sıralayabilir, × ile çıkarabilir, “Önerilen diğer haberler”den ekleyebilirsiniz."),
-    h("li", {}, "“Bülteni kopyala” ile tüm metni alıp Canva'ya yapıştırın. Tek bir bölüm için o bölümdeki “Kopyala”yı kullanın."))),
+    h("li", {}, "Podcast bölümünden haftanın podcast görselini yükleyin."),
+    h("li", {}, "“PDF indir” bülteni Canva'daki iki sayfalık düzende gösterir; eksik ya da taşan bir şey varsa üstte yazar. “PDF olarak kaydet” ile indirin."),
+    h("li", {}, "Canva'da çalışmak isterseniz “Bülteni kopyala” ile metni alıp yapıştırabilirsiniz."))),
   rerun: () => {
     const url = actionsUrl();
     const d = $("#dialog");
@@ -462,7 +495,7 @@ async function load(date) {
 
 async function init() {
   $("#copyAll").append(icon("copy"), h("span", { class: "lbl-long" }, "Bülteni kopyala"), h("span", { class: "lbl-short" }, "Kopyala"));
-  $("#print").append(icon("printer"), h("span", { class: "lbl" }, "PDF"));
+  $("#print").append(icon("download"), h("span", { class: "lbl" }, "PDF indir"));
   $("#menuBtn").append(icon("more"));
 
   const sel = $("#archive");
@@ -476,7 +509,7 @@ async function init() {
 
   sel.addEventListener("change", () => { isLatest = sel.selectedIndex === 0; load(sel.value); });
   $("#copyAll").addEventListener("click", () => copy(T.all(), "Bülten"));
-  $("#print").addEventListener("click", () => window.print());
+  $("#print").addEventListener("click", () => openPreview());
 
   const menu = $("#menu"), menuBtn = $("#menuBtn");
   const closeMenu = () => { menu.hidden = true; menuBtn.setAttribute("aria-expanded", "false"); };
@@ -486,7 +519,9 @@ async function init() {
     menuBtn.setAttribute("aria-expanded", String(!menu.hidden));
   });
   document.addEventListener("click", closeMenu);
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { closeMenu(); if (!$("#preview").hidden) closePreview(); }
+  });
   menu.addEventListener("click", (e) => {
     const act = e.target.closest("[data-act]")?.dataset.act;
     if (act) { closeMenu(); ACTIONS[act](); }

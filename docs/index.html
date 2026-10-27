@@ -7,8 +7,9 @@
 <meta name="robots" content="noindex">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:ital,wght@0,400;0,700;1,400;1,700&display=swap">
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="sheet.css">
 </head>
 <body>
 <header class="bar">
@@ -23,7 +24,7 @@
     </label>
     <div class="bar-actions">
       <button id="copyAll" class="btn primary" type="button"></button>
-      <button id="print" class="btn icon-only-sm" type="button" title="PDF olarak kaydet veya yazdır"></button>
+      <button id="print" class="btn icon-only-sm" type="button" title="Bülteni Canva düzeninde PDF olarak indir"></button>
       <div class="menu">
         <button id="menuBtn" class="btn ghost square" type="button" aria-haspopup="true" aria-expanded="false" title="Diğer işlemler"></button>
         <div id="menu" class="menu-pop" role="menu" hidden>
@@ -42,6 +43,8 @@
 
 <dialog id="dialog"><div id="dialogBody"></div></dialog>
 <div id="toast" role="status" aria-live="polite"></div>
+<div id="preview" hidden><div id="sheet"></div></div>
 <script src="app.js"></script>
+<script src="sheet.js"></script>
 </body>
 </html>

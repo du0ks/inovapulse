@@ -1,0 +1,122 @@
+/* PDF çıktısı: Canva bülteninin iki sayfalık A4 düzeni. Ölçüler referans PDF'ten mm olarak alınmıştır. */
+
+#sheet { display: none; }
+.sh-page {
+  --navy: #003f6b; --blue: #004aac; --gray: #535353; --line: #8c8c8c;
+  --cal-h: #a6d9d9; --cal-b: #d6efef;
+  position: relative; width: 210mm; height: 297mm; overflow: hidden;
+  background: #fff; color: #000;
+  font-family: Roboto, Arial, sans-serif; font-size: 10pt; line-height: 1.25;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.sh-page * { box-sizing: border-box; }
+.sh-page p { margin: 0; }
+.sh-frame { position: absolute; left: 6.8mm; right: 6.8mm; top: 5.6mm; bottom: 5.6mm; border: .7mm solid var(--navy); }
+
+/* üst bilgi (frame içi koordinatlar: page - 6.8mm / 5.6mm) */
+.sh-head { position: absolute; inset: 0 0 auto 0; height: 29.5mm; }
+.sh-logo { position: absolute; left: 9.2mm; top: 3.4mm; width: 36mm; }
+.sh-title { position: absolute; left: 0; right: 0; top: 10mm; text-align: center; font-size: 17pt; letter-spacing: .02em; }
+.sh-meta { position: absolute; right: 4.6mm; top: 9mm; width: 38.5mm; text-align: right; }
+.sh-date { font-weight: 700; font-size: 12.5pt; margin-bottom: 1.6mm; }
+.sh-issue { background: var(--navy); color: #fff; height: 11mm; line-height: 11mm; text-align: center; font-size: 14.5pt; }
+.sh-bar { position: absolute; left: 4mm; right: 4mm; top: 27.9mm; height: 1.6mm; background: var(--gray); }
+
+.sh-page h3 { margin: 0 0 1.4mm; font-size: 12pt; font-weight: 700; line-height: 1.2; }
+.sh-src { font-size: 7.5pt; margin-top: 1.2mm; }
+.sh-missing { display: grid; place-items: center; width: 100%; height: 100%; background: #f1f1f1; color: #888; font-size: 8pt; }
+.fit { overflow: hidden; }
+.fit.overflow { outline: .5mm dashed #d33; }
+
+/* 1. sayfa: WCI */
+.sh-wci {
+  position: absolute; left: 4mm; right: 4mm; top: 29.5mm; height: 74.5mm;
+  border: .3mm solid var(--line); border-top: 0; display: flex; gap: 2.5mm; padding: 6mm 3mm 5mm 3.5mm;
+}
+.sh-wci-text { flex: 0 0 115.5mm; display: flex; flex-direction: column; min-height: 0; }
+.sh-wci-text .fit { flex: 1; text-align: justify; line-height: 1.3; }
+.sh-wci-text .fit p + p { margin-top: 1em; }
+.sh-wci-chart { flex: 1; display: flex; flex-direction: column; min-width: 0; margin-top: -3mm; }
+.sh-chart-box { flex: 1; min-height: 0; display: flex; }
+.sh-chart-box > img { width: 100%; height: 100%; object-fit: contain; }
+.wci-svg { width: 100%; height: 100%; font-family: Roboto, Arial, sans-serif; }
+.wci-svg .ax { font-size: 6.4px; fill: #333; }
+.wci-svg .grid { stroke: #e3e3e3; stroke-width: .5; }
+.wci-svg .line { fill: none; stroke: #1f2a44; stroke-width: 1.3; stroke-linejoin: round; }
+
+/* 1. sayfa: rakam kutuları */
+.sh-figs { position: absolute; left: 4mm; right: 4mm; top: 107.6mm; height: 27mm; display: flex; justify-content: space-between; padding: 0 12.3mm 0 12.3mm; }
+.sh-fig { width: 42.3mm; text-align: center; display: flex; flex-direction: column; justify-content: space-between; }
+.sh-fig:nth-child(2) { margin-left: 3mm; }
+.sh-fig-lbl { font-size: 11pt; line-height: 1.25; }
+.sh-fig-val { background: var(--navy); color: #fff; height: 13.4mm; line-height: 13.4mm; border-radius: 2.4mm; font-size: 11.5pt; }
+
+/* 1. sayfa: grafik haberleri */
+.sh-charts { position: absolute; left: 4mm; right: 4mm; top: 136.4mm; height: 75mm; display: flex; border: .3mm solid var(--line); }
+.sh-cell { padding: 4mm 3.3mm 3mm 3.5mm; min-width: 0; }
+.sh-charts .sh-cell { flex: 1; display: flex; flex-direction: column; }
+.sh-charts .sh-cell + .sh-cell { border-left: .3mm solid var(--line); }
+.sh-chart-row { flex: 1; display: flex; gap: 2.6mm; min-height: 0; }
+.sh-chart-img { flex: 0 0 37.5mm; display: flex; flex-direction: column; min-height: 0; }
+.sh-chart-img > img, .sh-chart-img > .sh-missing { flex: 1; min-height: 0; width: 100%; object-fit: contain; object-position: top center; }
+.sh-chart-text { flex: 1; text-align: justify; line-height: 1.32; }
+
+/* 1. sayfa: etkinlik + podcast */
+.sh-bottom { position: absolute; left: 4mm; right: 4mm; top: 211.4mm; bottom: 0; display: flex; border-left: .3mm solid var(--line); border-right: .3mm solid var(--line); }
+.sh-event { flex: 1; display: flex; flex-direction: column; }
+.sh-event .fit { flex: 1; text-align: justify; line-height: 1.3; }
+.sh-event .fit p + p { margin-top: .55em; }
+.sh-event .fit p:nth-child(3) { margin-top: 1em; }
+.sh-event .fit p:nth-child(4), .sh-event .fit p:nth-child(5) { margin-top: 1em; }
+.sh-ev-title { font-weight: 700; }
+.sh-podcast { flex: 1; border-left: .3mm solid var(--line); display: flex; flex-direction: column; align-items: center; }
+.sh-pod-img { width: 47.5mm; flex: 1; min-height: 0; margin-bottom: 2mm; }
+.sh-pod-img > img { width: 100%; height: 100%; object-fit: contain; object-position: top center; }
+.sh-foot1 { position: absolute; right: 7.5mm; bottom: 1.2mm; font-size: 6.8pt; font-weight: 700; color: var(--navy); }
+
+/* 2. sayfa: haberler */
+.sh-news { position: absolute; left: 4mm; right: 4mm; top: 30.5mm; height: 208mm; line-height: 1.3; }
+.sh-news h2 { margin: 0 0 .5mm; color: var(--blue); font-size: 1.45em; font-weight: 700; line-height: 1.25; }
+.sh-news h4 { margin: .3em 0 .25em; color: var(--blue); font-size: 1.45em; font-weight: 400; line-height: 1.25; }
+.sh-news ul { margin: 0; padding: 0 0 0 4.5mm; list-style: none; }
+.sh-news li { position: relative; text-align: justify; margin-bottom: 1em; }
+.sh-news li::before { content: ""; position: absolute; left: -3.2mm; top: .5em; width: 1.2mm; height: 1.2mm; border-radius: 50%; background: #000; }
+.sh-news ul:last-of-type li:last-child { margin-bottom: 0; }
+.sh-disc { position: absolute; left: 4mm; right: 4mm; top: 239mm; text-align: center; font-style: italic; color: var(--blue); font-size: 7.4pt; line-height: 1.3; }
+
+/* 2. sayfa: takvim */
+.sh-cal { position: absolute; left: 4mm; right: 4mm; top: 250.2mm; bottom: 1.2mm; display: flex; gap: 2.8mm; }
+.sh-day { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.sh-day-h { background: var(--cal-h); padding: 1.6mm 1.8mm; height: 11.5mm; font-weight: 700; font-size: 9.6pt; line-height: 1.15; }
+.sh-day-b { flex: 1; background: var(--cal-b); padding: 2.5mm 1.8mm; font-weight: 700; line-height: 1.3; }
+.sh-foot2 { position: absolute; left: 3mm; right: 7mm; bottom: 1.1mm; display: flex; justify-content: space-between; font-size: 7.2pt; color: #1d4f91; letter-spacing: .02em; }
+.sh-foot2 b { color: var(--navy); }
+
+/* önizleme */
+#preview {
+  position: fixed; inset: 0; z-index: 50; overflow: auto; background: #3b3d42;
+  display: flex; flex-direction: column; align-items: center;
+}
+#preview[hidden] { display: none; }
+.pv-bar { position: sticky; top: 0; z-index: 2; width: 100%; display: flex; gap: 8px; align-items: center; padding: 10px 16px; background: var(--paper); border-bottom: 1px solid var(--line); }
+.pv-title { font-weight: 600; margin-right: auto; }
+.pv-msg { width: min(210mm, calc(100% - 32px)); margin: 16px 0 4px; color: #e9e9ec; font-size: 14px; }
+.pv-warn { background: var(--note-bg); color: var(--note-ink); border: 1px solid var(--note-line); border-radius: 10px; padding: 12px 16px; }
+.pv-warn ul { margin: 6px 0 0; padding-left: 20px; }
+.pv-ok { display: flex; gap: 8px; align-items: center; }
+.pv-hint { color: #c9cad0; font-size: 13px; margin: 10px 0 0; }
+body.previewing { overflow: hidden; }
+body.previewing #sheet { display: flex; flex-direction: column; gap: 16px; align-items: center; padding: 8px 0 40px; }
+body.previewing #sheet .sh-page { box-shadow: 0 4px 24px rgba(0,0,0,.4); flex: none; }
+
+@media print {
+  @page { size: A4; margin: 0; }
+  html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; }
+  body > *:not(#preview) { display: none !important; }
+  #preview, #preview[hidden] { display: block !important; position: static; overflow: visible; background: #fff; }
+  .pv-bar, .pv-msg { display: none !important; }
+  #sheet, body.previewing #sheet { display: block !important; padding: 0 !important; zoom: 1 !important; }
+  #sheet .sh-page { box-shadow: none !important; break-after: page; page-break-after: always; }
+  #sheet .sh-page:last-child { break-after: auto; page-break-after: auto; }
+  .fit.overflow { outline: 0; }
+}

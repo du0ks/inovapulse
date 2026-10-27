@@ -1,7 +1,7 @@
 {
  "date": "2026-10-23",
  "date_tr": "23 Ekim 2026",
- "issue": "2026 / 214",
+ "issue": "2026 / 213",
  "generated_at": "2026-10-23T13:58:42+03:00",
  "llm": "gemini:gemini-flash-lite-latest",
  "annual_exports_card": {
@@ -7956,7 +7956,7 @@
   "items": [
    {
     "title": "2025'te Dünyanın En Yoğun Konteyner Limanları",
-    "summary": "",
+    "summary": "Lloyd's List'in 2026 sıralamasına göre Şanghay, 2025'te elleçlediği 55,1 milyon TEU ile üst üste 16. kez dünyanın en yoğun konteyner limanı oldu. Singapur 44,7 milyon TEU ile ikinci, Ningbo-Zhoushan 43,9 milyon TEU ile üçüncü sırada yer aldı. Dünyanın en yoğun sekiz limanının altısı Çin'de bulunurken, ABD'nin en yoğun limanı Los Angeles 18. sırada kaldı. Avrupa'da Rotterdam 14,2 milyon TEU ile öne çıktı.",
     "original_title": "Ranked: The World’s 30 Busiest Shipping Ports",
     "url": "https://www.visualcapitalist.com/ranked-the-worlds-busiest-container-ports/",
     "image": "https://www.visualcapitalist.com/wp-content/uploads/2026/10/Top-Ports_02-share.webp",
@@ -7965,7 +7965,7 @@
    },
    {
     "title": "Küresel Ödemelerde En Çok Kullanılan Para Birimleri",
-    "summary": "",
+    "summary": "SWIFT verilerine göre ağustos 2026'da küresel ödeme değerinin %52,09'u ABD doları ile gerçekleşti ve dolar, diğer tüm para birimlerinin toplamını geride bıraktı. Euro %21,37 payla ikinci, İngiliz sterlini %6,37 ile üçüncü sırada yer aldı. Çin yuanı ise ekonomik büyüklüğüne rağmen %3,26 payla Japon yeninin gerisinde beşinci oldu. Dolar ve euro birlikte ödeme değerinin %73,46'sını oluşturdu.",
     "original_title": "Ranked: The Top Currencies Used in Global Payments",
     "url": "https://www.visualcapitalist.com/cp/ranked-top-currencies-in-global-payments/",
     "image": "https://www.visualcapitalist.com/wp-content/uploads/2026/10/swift-by-currency-share-shareable.webp",
@@ -8023,16 +8023,15 @@
    },
    {
     "date": "2026-10-28",
-    "text": "Türkiye Dış Ticaret Dengi (Final) açıklanacak. Cumhuriyet Bayramı arifesi nedeniyle saat 13.00'ten itibaren yarım gün tatil.",
+    "text": "Türkiye Dış Ticaret Dengi (Final) açıklanacak.",
     "country": "Türkiye",
     "time": "10:00",
-    "holiday": "Cumhuriyet Bayramı (saat 13.00'ten)",
     "weekday": "Çarşamba",
     "date_tr": "28 Ekim 2026"
    },
    {
     "date": "2026-10-29",
-    "text": "Cumhuriyet Bayramı nedeniyle resmî tatil.",
+    "text": "Cumhuriyet Bayramı",
     "country": "ABD",
     "time": "15:30",
     "holiday": "Cumhuriyet Bayramı",

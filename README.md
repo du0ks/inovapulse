@@ -15,6 +15,19 @@ Her hafta perşembeyi cumaya bağlayan gece bülten taslağını otomatik hazır
 
 Kaynak ve anahtar kelimeler `pipeline/config.py`, editoryal kurallar `pipeline/prompts.py` içinde.
 
+## PDF çıktısı
+
+Paneldeki **PDF indir** bülteni Canva'daki iki sayfalık A4 düzeninde (`docs/sheet.js`, `docs/sheet.css`)
+önizletir; **PDF olarak kaydet** tarayıcının yazdırma penceresini açar (Chrome/Edge, Hedef: "PDF olarak
+kaydet"). Dosya adı `Inovakademi-Haftalik-Dis-Ticaret-Bulten-GG.AA.YYYY.pdf` olarak önerilir.
+
+- Paneldeki tüm düzenlemeler PDF'e yansır. Metin kutulara sığmazsa yazı boyutu küçülür; yine sığmazsa
+  önizlemede uyarı çıkar.
+- WCI grafiği `docs/data/wci_history.json`'dan çizilir (geçmiş veri: `python -m scripts.backfill_wci`);
+  istenirse panelden Drewry grafiği görsel olarak yüklenebilir.
+- Podcast görseli panelden yüklenir, tarayıcıda saklanır ve değiştirilene kadar her hafta kullanılır.
+- Logo: `docs/assets/globby-logo.png` (daha yüksek çözünürlüklü dosya ile değiştirilebilir).
+
 ## Mimari (ücretsiz)
 
 ```
