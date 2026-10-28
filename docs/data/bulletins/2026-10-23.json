@@ -5709,8 +5709,8 @@
   "chart_embed_url": "https://www.canva.com/design/DAGyk78X08Q/P4vyjVAQP6e0-K6YUaJ7PA/view?embed",
   "routes_embed_url": "https://www.canva.com/design/DAGylAe2IPw/cTx-rE4iMahM7wlYjhFC7w/view?embed",
   "paragraphs": [
-   "22 Ekim 2026 itibarıyla Drewry Dünya Konteyner Endeksi (WCI), Asya-Avrupa ve Transpacific hatlarındaki artışların etkisiyle %2 yükselerek 40'lık konteyner başına 4.585 dolara ulaştı. ABD ithalat talebi Transpacific navlunlarını desteklerken, Şanghay–Los Angeles hattı %2 artışla 8.007 dolara, Şanghay–New York hattı ise %1 artışla 10.166 dolara çıktı. Öte yandan, Asya-Avrupa hattında Şanghay–Rotterdam %3 artarak 3.632 dolar, Şanghay–Cenova ise %5 artarak 4.152 dolar oldu.",
-   "Asya limanlarındaki yoğunluk hafifleyerek Şanghay'daki gemi bekleme süreleri önemli ölçüde düşerken, bölgedeki güvenlik riskleri ve Körfez'deki saldırılar gemi hareketlerini etkilemeyi sürdürüyor. Taşımacılar kapasite yönetimiyle oranları korumaya çalışıyor. Drewry, Transpacific hattında navlunun yatay seyretmesini, Asya-Avrupa hattında ise sıkı kapasite nedeniyle hafif artış göstermesini bekliyor."
+   "22 Ekim 2026 itibarıyla Drewry Dünya Konteyner Endeksi (WCI), Asya–Avrupa ve Transpasifik hatlarındaki artışların etkisiyle %2 yükselerek 40'lık konteyner başına 4.585 dolara ulaştı. ABD ithalat talebi Transpasifik navlunlarını desteklerken, Şanghay–Los Angeles hattı %2 artışla 8.007 dolara, Şanghay–New York hattı ise %1 artışla 10.166 dolara çıktı. Öte yandan, Asya–Avrupa hattında Şanghay–Rotterdam %3 artarak 3.632 dolar, Şanghay–Cenova ise %5 artarak 4.152 dolar oldu.",
+   "Asya limanlarındaki yoğunluk hafifleyerek Şanghay'daki gemi bekleme süreleri önemli ölçüde düşerken, bölgedeki güvenlik riskleri ve Körfez'deki saldırılar gemi hareketlerini etkilemeyi sürdürüyor. Taşımacılar kapasite yönetimiyle oranları korumaya çalışıyor. Drewry, Transpasifik hattında navlunun yatay seyretmesini, Asya–Avrupa hattında ise sıkı kapasite nedeniyle hafif artış göstermesini bekliyor."
   ],
   "routes": [
    {
@@ -5734,7 +5734,7 @@
     "change_pct": 1
    }
   ],
-  "outlook": "Transpacific hatlarında navlun fiyatlarının yatay seyretmesi, Asya-Avrupa hattında ise sıkı kapasite nedeniyle hafif artış kaydetmesi öngörülüyor."
+  "outlook": "Transpasifik hatlarında navlun fiyatlarının yatay seyretmesi, Asya–Avrupa hattında ise sıkı kapasite nedeniyle hafif artış kaydetmesi öngörülüyor."
  },
  "calendar_raw": [
   {
@@ -7270,8 +7270,8 @@
     "also_reported_by": []
    },
    {
-    "title": "İstanbul Havalimanı dünyanın en bağlantılı havalimanı seçildi",
-    "summary": "Ulaştırma ve Altyapı Bakanı Abdulkadir Uraloğlu, İstanbul Havalimanı'nda hizmete giren 4. ana pistin hava trafiğine operasyonel esneklik kazandırdığını belirtti. Yeni pist sayesinde uçuş mesafeleri kısalırken yakıt tasarrufu ve karbon emisyonlarında azalış sağlandı.",
+    "title": "İstanbul Havalimanı'nın 4. pisti yakıt ve emisyon tasarrufu sağladı",
+    "summary": "Ulaştırma ve Altyapı Bakanı Abdulkadir Uraloğlu, İstanbul Havalimanı'nda 18 Eylül'de hizmete açılan 4. ana pistten 15 Ekim'e kadar 1.738 kalkış yapıldığını açıkladı. Yeni pist, rotaları uçuş başına ortalama 15,2 deniz mili kısaltarak yakıt tüketimini ve karbon emisyonlarını azaltıyor.",
     "category": "lojistik & navlun",
     "score": 8,
     "source": "TRT Haber",
@@ -7501,8 +7501,8 @@
  "intl_news": {
   "items": [
    {
-    "title": "Japonya'da Dış Ticaret Açığı Artış Gösterdi",
-    "summary": "Orta Doğu'daki çatışmaların etkisiyle artan petrol ithalatı, Japonya'nın dış ticaret açığının derinleşmesine yol açtı. Mali yılın ilk yarısında açıklanan öncü veriler, enerji maliyetlerindeki yükselişin dış ticaret dengesini olumsuz etkilediğini ortaya koydu.",
+    "title": "Japonya'nın Dış Ticaret Açığı Petrol Fiyatlarıyla Derinleşti",
+    "summary": "Japonya'nın dış ticaret açığı, Orta Doğu'daki savaşın petrol ithalat fiyatlarını yükseltmesiyle mali yılın ilk yarısında (Nisan-Eylül) 2,81 trilyon yene (17,8 milyar dolar) ulaştı. Aynı dönemde ihracat %18,4 artışla 63,5 trilyon yen, ithalat ise %20,4 artışla 66,3 trilyon yen ile rekor seviyelere çıktı.",
     "category": "dış ticaret",
     "score": 9,
     "source": "finance.yahoo.com",
@@ -7596,36 +7596,15 @@
     ]
    },
    {
-    "title": "Küresel Konteyner Navlun Endekslerinde Yükseliş",
-    "summary": "Drewry Dünya Konteyner Endeksi, Asya-Avrupa hatlarındaki navlun artışlarının desteğiyle haftalık bazda yükseliş kaydetti. Artan jeopolitik riskler ve rota maliyetleri, küresel deniz yolu taşımacılığında fiyatların yüksek seyretmesine neden oluyor.",
-    "category": "lojistik & navlun",
+    "title": "QatarEnergy'den ABD'li Cheniere ile Uzun Vadeli LNG Anlaşması",
+    "summary": "QatarEnergy, ABD'li enerji şirketi Cheniere ile Louisiana ve Teksas tesislerinden yılda 4 milyon ton sıvılaştırılmış doğal gaz (LNG) tedarik etmek üzere 2054 yılına kadar geçerli iki uzun vadeli anlaşma imzaladı. Sevkiyatların 2031'de başlaması planlanıyor.",
+    "category": "şirket & yatırım",
     "score": 8,
-    "source": "globaltrademag.com",
-    "url": "https://www.globaltrademag.com/container-rates-mixed-chemical-tanker-rates-steady-as-peak-season-winds-down",
-    "published": "2026-10-19",
-    "original_title": "Drewry: The World Container Index increased 2% this week 43-2026 | Freight news | Shipping Telegraph",
-    "also_reported_by": [
-     {
-      "source": "container-news.com",
-      "url": "https://container-news.com/container-freight-rates-rebound-as-asia-europe-indexes-diverge",
-      "published": "Mon, 19 Oct 2026 13:00:32 GMT"
-     },
-     {
-      "source": "energynow.com",
-      "url": "https://energynow.com/2026/06/iran-war-anxiety-sends-global-container-shipping-rates-soaring",
-      "published": "Wed, 21 Oct 2026 15:00:00 GMT"
-     },
-     {
-      "source": "chosun.com",
-      "url": "https://www.chosun.com/english/national-en/2026/10/19/BRW75YAEORCD5FVJ43SFHREKSM",
-      "published": "Mon, 19 Oct 2026 02:02:28 GMT"
-     },
-     {
-      "source": "Fibre2Fashion",
-      "url": "https://www.fibre2fashion.com/news/textiles-logistics-news/drewry-wci-gains-2-2-amid-higher-asia-europe-shipping-rates-314472-newsdetails.htm?amp=true",
-      "published": "2026-10-23T10:05:50+00:00"
-     }
-    ]
+    "source": "Anadolu Agency",
+    "url": "https://www.aa.com.tr/en/middle-east/qatarenergy-signs-deal-to-buy-4-million-tons-of-us-lng-annually-through-2054/4097361",
+    "published": "2026-10-22",
+    "original_title": "QatarEnergy signs deal to buy 4 million tons of US LNG annually through 2054",
+    "also_reported_by": []
    },
    {
     "title": "ABD'nin Kanada Vergilerine Karşı Yasal İtiraz",
@@ -7796,17 +7775,6 @@
   ],
   "reserve": [
    {
-    "title": "QatarEnergy'den ABD'li Cheniere ile Uzun Vadeli LNG Anlaşması",
-    "summary": "QatarEnergy, ABD'li enerji şirketi Cheniere ile Louisiana ve Teksas tesislerinden yılda 4 milyon ton sıvılaştırılmış doğal gaz (LNG) tedarik etmek üzere 2054 yılına kadar geçerli bir anlaşma imzaladı. Sevkiyatların 2031'de başlaması planlanıyor.",
-    "category": "şirket & yatırım",
-    "score": 8,
-    "source": "Anadolu Agency",
-    "url": "https://www.aa.com.tr/en/middle-east/qatarenergy-signs-deal-to-buy-4-million-tons-of-us-lng-annually-through-2054/4097361",
-    "published": "2026-10-22",
-    "original_title": "QatarEnergy signs deal to buy 4 million tons of US LNG annually through 2054",
-    "also_reported_by": []
-   },
-   {
     "title": "Yeni Tarifeler Güneş Enerjisi PPA Fiyatlarını Artırdı",
     "summary": "LevelTen verilerine göre, ABD'de güneş enerjisi satın alma anlaşması (PPA) fiyatları, yeni devreye giren ticaret tarifelerinin etkisiyle üçüncü çeyrekte %5 oranında yükseldi. Politika değişiklikleri yenilenebilir enerji projelerinin maliyetlerini yukarı çekiyor.",
     "category": "sürdürülebilirlik",
@@ -7942,7 +7910,7 @@
    "date": "27.10.2026",
    "start_date": "2026-10-27",
    "end_date": "2026-10-27",
-   "time": null,
+   "time": "14:00-16:00",
    "location": "Online",
    "fee": "Ücretsiz",
    "register_url": "https://uib.org.tr/tr/akademi-egitimler",
@@ -7959,18 +7927,20 @@
     "summary": "Lloyd's List'in 2026 sıralamasına göre Şanghay, 2025'te elleçlediği 55,1 milyon TEU ile üst üste 16. kez dünyanın en yoğun konteyner limanı oldu. Singapur 44,7 milyon TEU ile ikinci, Ningbo-Zhoushan 43,9 milyon TEU ile üçüncü sırada yer aldı. Dünyanın en yoğun sekiz limanının altısı Çin'de bulunurken, ABD'nin en yoğun limanı Los Angeles 18. sırada kaldı. Avrupa'da Rotterdam 14,2 milyon TEU ile öne çıktı.",
     "original_title": "Ranked: The World’s 30 Busiest Shipping Ports",
     "url": "https://www.visualcapitalist.com/ranked-the-worlds-busiest-container-ports/",
-    "image": "https://www.visualcapitalist.com/wp-content/uploads/2026/10/Top-Ports_02-share.webp",
+    "image": "https://www.visualcapitalist.com/wp-content/uploads/2026/10/Top-Ports_02-web.webp",
     "source": "www.visualcapitalist.com",
-    "published": "2026-10-19T15:45:58+00:00"
+    "published": "2026-10-19T15:45:58+00:00",
+    "image_share": "https://www.visualcapitalist.com/wp-content/uploads/2026/10/Top-Ports_02-share.webp"
    },
    {
     "title": "Küresel Ödemelerde En Çok Kullanılan Para Birimleri",
     "summary": "SWIFT verilerine göre ağustos 2026'da küresel ödeme değerinin %52,09'u ABD doları ile gerçekleşti ve dolar, diğer tüm para birimlerinin toplamını geride bıraktı. Euro %21,37 payla ikinci, İngiliz sterlini %6,37 ile üçüncü sırada yer aldı. Çin yuanı ise ekonomik büyüklüğüne rağmen %3,26 payla Japon yeninin gerisinde beşinci oldu. Dolar ve euro birlikte ödeme değerinin %73,46'sını oluşturdu.",
     "original_title": "Ranked: The Top Currencies Used in Global Payments",
     "url": "https://www.visualcapitalist.com/cp/ranked-top-currencies-in-global-payments/",
-    "image": "https://www.visualcapitalist.com/wp-content/uploads/2026/10/swift-by-currency-share-shareable.webp",
+    "image": "https://www.visualcapitalist.com/wp-content/uploads/2026/10/swift-by-currency-share-web.webp",
     "source": "www.visualcapitalist.com",
-    "published": "2026-10-22T22:43:48+00:00"
+    "published": "2026-10-22T22:43:48+00:00",
+    "image_share": "https://www.visualcapitalist.com/wp-content/uploads/2026/10/swift-by-currency-share-shareable.webp"
    }
   ],
   "reserve": [
@@ -7979,27 +7949,30 @@
     "summary": "",
     "original_title": "Ranked: The World’s Largest Economies in 2026",
     "url": "https://www.visualcapitalist.com/the-worlds-largest-economies-by-gdp-in-2026/",
-    "image": "https://www.visualcapitalist.com/wp-content/uploads/2026/10/Largest-Economies-GDP-vs-PPP_-Oct-2026_02-share.webp",
+    "image": "https://www.visualcapitalist.com/wp-content/uploads/2026/10/Largest-Economies-GDP-vs-PPP_-Oct-2026_02-web.webp",
     "source": "www.visualcapitalist.com",
-    "published": "2026-10-21T11:16:49+00:00"
+    "published": "2026-10-21T11:16:49+00:00",
+    "image_share": "https://www.visualcapitalist.com/wp-content/uploads/2026/10/Largest-Economies-GDP-vs-PPP_-Oct-2026_02-share.webp"
    },
    {
     "title": "Ranked: The World’s Largest Tourism Economies",
     "summary": "",
     "original_title": "Ranked: The World’s Largest Tourism Economies",
     "url": "https://www.visualcapitalist.com/ranked-the-worlds-largest-tourism-economies-in-2025/",
-    "image": "https://www.visualcapitalist.com/wp-content/uploads/2026/10/Biggest_Tourist_Economies_Worldwide_SHARE.webp",
+    "image": "https://www.visualcapitalist.com/wp-content/uploads/2026/10/Biggest_Tourist_Economies_Worldwide_MAIN.webp",
     "source": "www.visualcapitalist.com",
-    "published": "2026-10-20T10:02:15+00:00"
+    "published": "2026-10-20T10:02:15+00:00",
+    "image_share": "https://www.visualcapitalist.com/wp-content/uploads/2026/10/Biggest_Tourist_Economies_Worldwide_SHARE.webp"
    },
    {
     "title": "Ranked: Countries With the Most Debt to China",
     "summary": "",
     "original_title": "Ranked: Countries With the Most Debt to China",
     "url": "https://www.visualcapitalist.com/ranked-countries-with-the-most-debt-to-china/",
-    "image": "https://www.visualcapitalist.com/wp-content/uploads/2026/10/countries-in-debt-to-china-share-1.webp",
+    "image": "https://www.visualcapitalist.com/wp-content/uploads/2026/10/Global-Economy-in-2026-1.webp",
     "source": "www.visualcapitalist.com",
-    "published": "2026-10-22T12:03:14+00:00"
+    "published": "2026-10-22T12:03:14+00:00",
+    "image_share": "https://www.visualcapitalist.com/wp-content/uploads/2026/10/countries-in-debt-to-china-share-1.webp"
    }
   ]
  },
@@ -8023,7 +7996,7 @@
    },
    {
     "date": "2026-10-28",
-    "text": "Türkiye Dış Ticaret Dengi (Final) açıklanacak.",
+    "text": "Türkiye Dış Ticaret Dengesi (Final) açıklanacak.",
     "country": "Türkiye",
     "time": "10:00",
     "weekday": "Çarşamba",
@@ -8032,8 +8005,6 @@
    {
     "date": "2026-10-29",
     "text": "Cumhuriyet Bayramı",
-    "country": "ABD",
-    "time": "15:30",
     "holiday": "Cumhuriyet Bayramı",
     "weekday": "Perşembe",
     "date_tr": "29 Ekim 2026"

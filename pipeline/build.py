@@ -14,7 +14,7 @@ from . import config, llm, prompts
 from .sources import (
     PAYWALLED, article_info, article_text, page_text, dedupe, fetch_bigpara, fetch_charts, fetch_drewry,
     fetch_event_listings, fetch_gnews, fetch_rss, fetch_tavily, fetch_ticaret, fetch_trade_official,
-    issue_number, log, resolve_gnews, shortlist_calendar, tr_holidays,
+    issue_number, log, resolve_gnews, shortlist_calendar, tr_holidays, vc_main_image,
 )
 
 TR_TZ = timezone(timedelta(hours=3))
@@ -271,6 +271,8 @@ def build_charts(cands, today):
     items = [card(pick(cands, x.get("id")), x) for x in out["items"] if pick(cands, x.get("id"))][:2]
     used = {i["url"] for i in items}
     reserve = [card(c) for c in (pick(cands, i) for i in out.get("reserve_ids") or []) if c and c["url"] not in used]
+    for c in items + reserve:  # akıştaki görsel çoğu zaman yatay paylaşım görseli; dikey infografiği tercih et
+        c["image"] = vc_main_image(c["url"]) or c["image"]
     return {"items": items, "reserve": reserve}
 
 
@@ -401,6 +403,8 @@ def add_holidays(out, days):
             out.setdefault("days", []).append(d)
         d["text"] = name
         d["holiday"] = name
+        for k in ("country", "time"):  # yerine geçen veri açıklamasından kalmasın
+            d.pop(k, None)
     out["days"] = sorted(out.get("days", []), key=lambda d: d.get("date") or "")
 
 

@@ -69,7 +69,7 @@ WCI_SYSTEM = f"""Sen İnovakademi'nin Haftalık Dış Ticaret Bülteni editörü
 (WCI) haftalık değerlendirmesini Türkçeye çevirip bülten formatında özetleyeceksin.
 
 Örnek format (2 paragraf):
-"20 Ağustos 2026 itibarıyla Drewry Dünya Konteyner Endeksi (WCI), Transpacific hattındaki artan navlun
+"20 Ağustos 2026 itibarıyla Drewry Dünya Konteyner Endeksi (WCI), Transpasifik hattındaki artan navlun
 fiyatlarının etkisiyle %4 yükselerek 40'lık konteyner başına 4.526 dolara çıktı. Şanghay–New York ve
 Şanghay–Los Angeles hatlarında fiyatlar %9 artarken, kapasite kısıtlamaları ve blank sailing
 uygulamaları navlun fiyatlarını destekliyor.
@@ -79,7 +79,8 @@ navlun fiyatlarının genel olarak yatay seyretmesini öngörüyor."
 
 {STYLE}
 Toplam 90-130 kelime. Hat isimleri: Şanghay–Rotterdam, Şanghay–Cenova, Şanghay–Los Angeles,
-Şanghay–New York, Rotterdam–Şanghay, Los Angeles–Şanghay, New York–Rotterdam, Rotterdam–New York."""
+Şanghay–New York, Rotterdam–Şanghay, Los Angeles–Şanghay, New York–Rotterdam, Rotterdam–New York.
+Bölge adları Türkçe yazılır: Transpasifik, Transatlantik, Asya–Avrupa (Transpacific, Asia-Europe değil)."""
 
 WCI_USER = """Drewry değerlendirme metni (İngilizce):
 ---

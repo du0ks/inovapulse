@@ -551,6 +551,33 @@ def fetch_charts(since, pages=2):
     return out
 
 
+def vc_main_image(url):
+    """Yazıya eklenmiş dikey infografik ("-web" sürümü). Makale sayfası Cloudflare arkasında
+    olduğundan WordPress API'sinden okunur; bulunamazsa None."""
+    slug = url.rstrip("/").rsplit("/", 1)[-1]
+    api = "https://www.visualcapitalist.com/wp-json/wp/v2"
+    try:
+        for kind in ("posts", "cp"):
+            r = session.get(f"{api}/{kind}?slug={slug}&_fields=id", timeout=30)
+            if r.ok and r.json():
+                pid = r.json()[0]["id"]
+                break
+        else:
+            return None
+        media = session.get(f"{api}/media?parent={pid}&per_page=20&_fields=source_url,media_details",
+                            timeout=30).json()
+    except Exception as ex:
+        log(f"  ! Grafik görseli ({slug}): {ex}")
+        return None
+    best = None
+    for m in media:
+        d = m.get("media_details") or {}
+        w, h = d.get("width") or 0, d.get("height") or 0
+        if w >= 600 and h > w and (best is None or h / w > best[0]):
+            best = (h / w, m["source_url"])
+    return best and best[1]
+
+
 # --- Ücretsiz etkinlik ilanları (tarihli listeler) ---------------------------
 
 EVENT_WORDS = re.compile(r"eğitim|webinar|webinar|seminer|toplantı|sohbet|program|etkinlik|zirve|"

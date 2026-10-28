@@ -5,6 +5,7 @@ const $ = (s, el = document) => el.querySelector(s);
 const app = $("#app");
 let doc = null;        // ekranda gösterilen (düzenlenmiş) bülten
 let storeKey = null;
+let base = null;       // düzenlemelerin üzerine yapıldığı sunucu verisi
 let history = [];
 let isLatest = true;
 
@@ -77,7 +78,7 @@ function sourceName(x) {
 
 let saveTimer;
 function save() {
-  try { localStorage.setItem(storeKey, JSON.stringify(doc)); }
+  try { localStorage.setItem(storeKey, JSON.stringify({ base, doc })); }
   catch { toast("Değişiklik kaydedilemedi: tarayıcı deposu dolu (büyük görselleri kaldırmayı deneyin)."); return; }
   const el = $(".saved");
   if (el) {
@@ -482,13 +483,30 @@ const ACTIONS = {
 
 // ---- yükleme --------------------------------------------------------------
 
+// Sunucudaki taslak sonradan düzeltilirse (ör. eksik metin dolduruldu), kullanıcının
+// dokunmadığı alanlar yeni veriyi alır; düzenlediği alanlar korunur.
+function merge3(b, s, f) {
+  const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+  if (same(s, b)) return f;
+  if (same(f, b)) return s;
+  const obj = (x) => x && typeof x === "object" && !Array.isArray(x);
+  if (!obj(b) || !obj(s) || !obj(f)) return s;
+  const out = {};
+  for (const k of new Set([...Object.keys(f), ...Object.keys(s)])) {
+    if (!(k in s) && k in b) continue;          // kullanıcı sildi
+    out[k] = k in s ? merge3(b[k], s[k], f[k]) : f[k];
+  }
+  return out;
+}
+
 async function load(date) {
   const url = date ? `data/bulletins/${date}.json` : "data/latest.json";
   const fresh = await (await fetch(url, { cache: "no-store" })).json();
-  storeKey = `bulten:${fresh.date}:${fresh.generated_at}`;
+  storeKey = `bulten2:${fresh.date}:${fresh.generated_at}`;
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(storeKey) || "null"); } catch {}
-  doc = saved || fresh;
+  base = structuredClone(fresh);  // doc düzenlendikçe base değişmesin
+  doc = saved?.doc ? merge3(saved.base, saved.doc, fresh) : fresh;
   render();
   return fresh;
 }

@@ -72,7 +72,14 @@ function shortHost(u) {
 function wciChart(hist, uptoIso) {
   const pts = hist.filter((x) => x.composite && (!uptoIso || x.date <= uptoIso)).slice(-56);
   const first = pts.length ? new Date(pts[pts.length - 1].date) : null;
-  const data = first ? pts.filter((x) => (first - new Date(x.date)) / 864e5 <= 380) : [];
+  const near = first ? pts.filter((x) => (first - new Date(x.date)) / 864e5 <= 380) : [];
+  // Yanlış okunmuş tek bir değer (ör. hat fiyatı) iki komşusundan %40'tan fazla saparsa çizme
+  const data = near.filter((x, i) => {
+    const a = near[i - 1], b = near[i + 1];
+    if (!a || !b) return true;
+    const off = (v) => x.composite > v * 1.4 || x.composite < v / 1.4;
+    return !(off(a.composite) && off(b.composite));
+  });
   if (data.length < 3) return null;
   const W = 300, H = 230, L = 34, R = 6, T = 22, B = 46;
   const vals = data.map((x) => x.composite);
@@ -96,13 +103,12 @@ function wciChart(hist, uptoIso) {
   s.append(svgEl("polyline", { points: data.map((x) => `${X(x.date)},${Y(x.composite)}`).join(" "), class: "line" }));
   // Yaklaşık ayda bir tarih etiketi
   const months = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
-  let last = "";
-  for (const x of data) {
-    const d = new Date(x.date), key = `${d.getFullYear()}-${d.getMonth()}`;
-    if (key === last) continue;
-    last = key;
-    const t = svgEl("text", { x: X(x.date), y: H - B + 10, class: "ax", "text-anchor": "end",
-      transform: `rotate(-45 ${X(x.date)} ${H - B + 10})` });
+  // Veri haftaları düzensiz olabildiğinden etiketler ayın ortasına, eşit aralıkla konur
+  const d0 = new Date(t0);
+  for (let d = new Date(d0.getFullYear(), d0.getMonth(), 15); d.getTime() <= t1; d.setMonth(d.getMonth() + 1)) {
+    if (d.getTime() < t0) continue;
+    const x = X(d);
+    const t = svgEl("text", { x, y: H - B + 10, class: "ax", "text-anchor": "end", transform: `rotate(-45 ${x} ${H - B + 10})` });
     t.textContent = `${months[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`;
     s.append(t);
   }
@@ -136,7 +142,10 @@ function page1(problems) {
 
   const charts = (doc.charts?.items || []).slice(0, 2);
   if (charts.length < 2) problems.push("Grafik haberleri bölümünde iki grafik olmalı.");
-  charts.forEach((c, i) => { if (!c.image) problems.push(`${i + 1}. grafik haberinin görseli yok.`); });
+  charts.forEach((c, i) => {
+    if (!c.image) problems.push(`${i + 1}. grafik haberinin görseli yok.`);
+    if (!(c.summary || "").trim()) problems.push(`${i + 1}. grafik haberinin metni boş.`);
+  });
 
   const e = doc.event?.selected;
   if (!e?.title) problems.push("Ücretsiz etkinlik seçilmedi.");
