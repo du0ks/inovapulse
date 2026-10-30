@@ -16,8 +16,8 @@ from . import config, llm, prompts
 from .sources import (
     PAYWALLED, article_info, article_text, page_text, dedupe, fetch_bigpara, fetch_charts, fetch_drewry,
     fetch_event_listings, fetch_gnews, fetch_rss, fetch_tavily, fetch_ticaret, fetch_trade_official,
-    TRADE_WORDS, issue_number, log, reader_check, resolve_gnews, shortlist_calendar, tr_holidays,
-    vc_main_image,
+    TRADE_WORDS, issue_number, log, reader_check, register_link, resolve_gnews, shortlist_calendar,
+    tr_holidays, vc_main_image,
 )
 
 TR_TZ = timezone(timedelta(hours=3))
@@ -109,27 +109,32 @@ MAX_PER_SITE = 2
 
 def diversify(news, count, since):
     """Aynı siteden en fazla MAX_PER_SITE haber. Sınırı aşan haber için önce aynı haberin başka bir
-    sitedeki versiyonu denenir; yoksa yedeğe kalır. Haber sayısı dolmazsa sınır bir artırılır."""
-    for cap in (MAX_PER_SITE, MAX_PER_SITE + 1):
-        items, rest, used = [], [], {}
-        for it in news:
-            if len(items) < count and used.get(site(it["url"]), 0) >= cap:
-                for a in it.get("also_reported_by", []):
-                    if used.get(site(a["url"]), 0) >= cap:
-                        continue
-                    url, good, _ = check_link(a["url"], a.get("published"), since)
-                    if good:
-                        it = {**it, "url": url, "source": a["source"], "published": good["date"],
-                              "also_reported_by": [x for x in it["also_reported_by"] if x["url"] != a["url"]]}
-                        break
-            if len(items) < count and used.get(site(it["url"]), 0) < cap:
-                items.append(it)
-                used[site(it["url"])] = used.get(site(it["url"]), 0) + 1
-            else:
-                rest.append(it)
-        if len(items) >= count or len(items) == len(news):
+    sitedeki versiyonu denenir; yoksa yedeğe kalır. Haber sayısı yine dolmazsa eksik kadar haber
+    bir üst sınırla eklenir."""
+    items, rest, used = [], [], Counter()
+    for it in news:
+        if len(items) < count and used[site(it["url"])] >= MAX_PER_SITE:
+            for a in it.get("also_reported_by", []):
+                if used[site(a["url"])] >= MAX_PER_SITE:
+                    continue
+                url, good, _ = check_link(a["url"], a.get("published"), since)
+                if good:
+                    it = {**it, "url": url, "source": a["source"], "published": good["date"],
+                          "also_reported_by": [x for x in it["also_reported_by"] if x["url"] != a["url"]]}
+                    break
+        if len(items) < count and used[site(it["url"])] < MAX_PER_SITE:
+            items.append(it)
+            used[site(it["url"])] += 1
+        else:
+            rest.append(it)
+    for it in list(rest):
+        if len(items) >= count:
             break
-        log(f"  ! kaynak çeşitliliği: {cap} sınırıyla {len(items)} haber; sınır gevşetiliyor")
+        if used[site(it["url"])] <= MAX_PER_SITE:
+            log(f"  ! kaynak çeşitliliği: eksik yer {site(it['url'])} kaynağından dolduruldu")
+            items.append(it)
+            rest.remove(it)
+            used[site(it["url"])] += 1
     return items, rest
 
 
@@ -356,6 +361,11 @@ def build_event(candidates, today):
         c["page_date"] = info["date"]
         if len(info["text"]) > len(c.get("snippet") or ""):
             c["snippet"] = ((c.get("snippet") or "") + " " + info["text"]).strip()
+        # Kayıt sayfası çoğu zaman saat bilgisini de içerir; okuyucuya da doğrudan o verilir
+        reg = register_link(c["url"])
+        if reg and reg.rstrip("/") != c["url"].rstrip("/"):
+            c["register_hint"] = reg
+            c["snippet"] = f"Kayıt linki: {reg} | Kayıt sayfası: {page_text(reg, 600)} | {c.get('snippet') or ''}"
         return c
 
     with ThreadPoolExecutor(max_workers=8) as ex:
@@ -408,7 +418,8 @@ def build_event(candidates, today):
             "date": fmt(start) + (f"-{fmt(end)}" if end and end != start else "") if start else fmt(end),
             "start_date": start, "end_date": end,
             "time": x.get("time"), "location": "Online", "fee": "Ücretsiz",
-            "register_url": x.get("register_url") or c["url"], "source_url": c["url"], "source": c["source"],
+            "register_url": x.get("register_url") or c.get("register_hint") or c["url"],
+            "source_url": c["url"], "source": c["source"],
             "relevance": x.get("relevance"),
         })
     # Önce önümüzdeki 3 hafta içindekiler, sonra en ilgili, sonra en yakın tarihli

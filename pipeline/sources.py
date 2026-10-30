@@ -7,7 +7,7 @@ import os
 import re
 import time
 from datetime import date, datetime, timedelta, timezone
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urljoin
 
 import feedparser
 import requests
@@ -448,6 +448,25 @@ def page_text(url, limit=4000):
         return ""
     t = re.sub(r"<(nav|header|footer)\b.*?</\1>", " ", r.text, flags=re.S | re.I)
     return re.sub(r"\s+", " ", _html_to_text(t)).strip()[:limit]
+
+
+def register_link(url):
+    """Etkinlik sayfasındaki kayıt/başvuru linki (metni "Kayıt", "Başvuru", "Register" içeren ilk link)."""
+    try:
+        r = session.get(url, timeout=20)
+        r.raise_for_status()
+    except Exception:
+        return None
+    links = [(href, clean_text(text, 200)) for href, text in
+             re.findall(r'<a[^>]+href="([^"#]+)"[^>]*>(.*?)</a>', r.text, flags=re.S | re.I)
+             if not href.startswith(("mailto:", "javascript:"))
+             and not re.search(r"kvkk|kisiselveri|aydinlatma|gizlilik", href, re.I)]
+    # Yalnızca açıkça kayıt linki olanlar ("Kayıt Linki", "kayıt olmak için", "Başvuru Formu");
+    # yan menüdeki "... Kayıt Sistemi" gibi duyurular eşleşmesin
+    for href, text in links:
+        if re.search(r"kayıt (linki|ol|için|formu)|başvuru (linki|formu)|^başvur|register", text, re.I):
+            return urljoin(r.url, html.unescape(href))
+    return None
 
 
 def article_text(url, limit=3500):
