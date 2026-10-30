@@ -56,7 +56,10 @@ jobs:
       TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
       LLM_PROVIDER: ${{ vars.LLM_PROVIDER }}
     steps:
+      # Sıradaki çalıştırma, öncekinin kaydettiği taslağı görsün (tetiklendiği andaki commit değil)
       - uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: LLM anahtarı kontrolü
         run: |

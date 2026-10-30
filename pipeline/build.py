@@ -340,6 +340,11 @@ LISTING_URL = re.compile(r"(uib\.org\.tr/tr/akademi-egitimler|ticaret\.gov\.tr/d
 LISTING_TITLE = re.compile(r"(^|[-–|:]\s*)(eğitimler|etkinlikler|duyurular|seminerler|webinarlar)\s*$", re.I)
 
 
+def kamu(url):
+    """Kamu kurumu sayfası: bakanlık toplantı/eğitimleri ücretsizdir, sayfada ayrıca yazmaz."""
+    return urlparse(url or "").netloc.lower().endswith(".gov.tr")
+
+
 def is_listing(c):
     return bool(LISTING_URL.search(c.get("url") or "") or LISTING_TITLE.search(c.get("title") or ""))
 
@@ -402,7 +407,7 @@ def build_event(candidates, today):
                else "çok günlü seri/program") or \
               (None if (start or last) <= limit else "çok ileri tarih") or \
               (None if x.get("online") is True else "çevrim içi değil") or \
-              (None if x.get("free") is True else "ücretsiz değil") or \
+              (None if x.get("free") is True or (x.get("free") is None and kamu(c["url"])) else "ücretsiz değil") or \
               (None if (x.get("relevance") or 0) >= 5 else "konu dışı")
         if why:
             log(f"    – etkinlik elendi: {(x.get('title') or c['title'])[:60]} ({why})")
