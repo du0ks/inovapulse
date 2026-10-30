@@ -162,6 +162,7 @@ const T = {
       `Eğitim Yeri: ${[e.location, e.fee].filter(Boolean).join(", ")}`, "",
       `Kayıt için: ${e.register_url || ""}`].join("\n");
   },
+  podcast: () => ["İhracat Muhabbetleri Podcast", podcast()?.text || ""].join("\n").trim(),
   news: (key, heading) => [heading, ...(doc[key]?.items || []).map((x) => x.summary)].join("\n\n"),
   week: () => {
     const nw = doc.next_week || {};
@@ -170,7 +171,7 @@ const T = {
   },
   all: () => [
     `Haftalık Dış Ticaret Bülteni · ${doc.date_tr} · Sayı: ${doc.issue}`, "",
-    T.wci(), "", T.trade(), "", T.charts(), "", T.event(), "",
+    T.wci(), "", T.trade(), "", T.charts(), "", T.event(), "", T.podcast(), "",
     "Türkiye ve yurt dışında bu hafta hangi gelişmeler oldu? Birlikte bir göz atalım.", "",
     T.news("tr_news", "1- Türkiye'deki Gelişmeler;"), "",
     T.news("intl_news", "2- Yurt Dışındaki Gelişmeler;"), "", T.week(),
@@ -191,7 +192,7 @@ function checklist() {
   }
   if (!e) items.push({ id: "event", text: "Bu hafta ileri tarihli, online ve ücretsiz bir etkinlik bulunamadı. Etkinlik bölümüne elle yazın." });
   else if (!e.time) items.push({ id: "eventdate", text: "Etkinliğin saatini kayıt sayfasından ekleyin.", url: e.register_url || e.source_url, cta: "Etkinlik sayfası" });
-  items.push({ id: "podcast", text: "Bu haftanın podcast görselini Podcast bölümünden yükleyin (yüklemezseniz son yüklenen kullanılır)." });
+  items.push({ id: "podcast", text: "Bu haftanın podcast görselini ve açıklamasını Podcast bölümünde güncelleyin (değiştirmezseniz son girilenler kullanılır)." });
   for (const w of doc.warnings || []) {
     if (/korundu/.test(w)) items.push({ id: `w:${w}`, text: w.replace("bu çalıştırmada üretilemedi; önceki sürüm korundu.", "bu sabah güncellenemedi; bir önceki taslağın metni gösteriliyor.") });
   }
@@ -350,18 +351,27 @@ function eventSection(no) {
     pickFrom);
 }
 
+function savePodcast(patch) {
+  const pod = { ...(podcast() || {}), ...patch, updated: new Date().toISOString() };
+  try { localStorage.setItem(PODCAST_KEY, JSON.stringify(pod)); return true; }
+  catch { toast("Podcast kaydedilemedi: tarayıcı deposu dolu."); return false; }
+}
+
 function podcastSection(no) {
-  const pod = podcast();
-  return section(no, "İhracat Muhabbetleri Podcast", null,
+  const pod = podcast() || {};
+  const text = h("p", { class: "pod-text", contenteditable: "plaintext-only", spellcheck: "true",
+    "data-ph": "Bu haftaki bölümün açıklaması (konuk, konu, nereden dinlenir)" }, pod.text || "");
+  text.addEventListener("input", () => { savePodcast({ text: text.innerText.trim() }); save(); });
+  return section(no, "İhracat Muhabbetleri Podcast", T.podcast,
     h("div", { class: "pod" },
-      pod?.image ? h("img", { class: "pod-img", src: pod.image, alt: "Podcast görseli" }) : h("div", { class: "empty" }, "Henüz podcast görseli yüklenmedi."),
-      h("div", {},
-        h("p", { class: "meta", style: "margin-top:0" }, pod?.updated
-          ? `Son yükleme: ${longDate(pod.updated)}. Bu görsel siz değiştirene kadar her hafta kullanılır.`
-          : "Yüklenen görsel bu tarayıcıda saklanır ve siz değiştirene kadar her hafta kullanılır."),
-        uploadButton(pod?.image ? "Yeni bölüm görseli yükle" : "Görsel yükle", (img) => {
-          try { localStorage.setItem(PODCAST_KEY, JSON.stringify({ image: img, updated: new Date().toISOString() })); }
-          catch { toast("Görsel kaydedilemedi: tarayıcı deposu dolu."); return; }
+      pod.image ? h("img", { class: "pod-img", src: pod.image, alt: "Podcast görseli" }) : h("div", { class: "empty" }, "Henüz podcast görseli yüklenmedi."),
+      h("div", { class: "pod-body" },
+        text,
+        h("p", { class: "meta" }, pod.updated
+          ? `Son değişiklik: ${longDate(pod.updated)}. Görsel ve açıklama siz değiştirene kadar her hafta kullanılır; her yeni bölümde ikisini de güncelleyin.`
+          : "Görsel ve açıklama bu tarayıcıda saklanır ve siz değiştirene kadar her hafta kullanılır."),
+        uploadButton(pod.image ? "Yeni bölüm görseli yükle" : "Görsel yükle", (img) => {
+          if (!savePodcast({ image: img })) return;
           render(); toast("Podcast görseli kaydedildi.");
         }))));
 }

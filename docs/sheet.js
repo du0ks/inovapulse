@@ -155,6 +155,7 @@ function page1(problems) {
   }
   const pod = podcast();
   if (!pod?.image) problems.push("Podcast görseli yüklenmedi (panelde Podcast bölümü).");
+  if (!pod?.text) problems.push("Podcast açıklaması boş (panelde Podcast bölümü).");
 
   return h("section", { class: "sh-page" },
     h("div", { class: "sh-frame" },
@@ -194,7 +195,10 @@ function page1(problems) {
             ] : h("p", {}, ""))),
         h("div", { class: "sh-cell sh-podcast" },
           h("h3", {}, "İhracat Muhabbetleri Podcast"),
-          h("div", { class: "sh-pod-img" }, pod?.image ? h("img", { src: pod.image, alt: "" }) : h("div", { class: "sh-missing" }, "Podcast görseli yok"))))),
+          h("div", { class: "sh-pod-row" },
+            h("div", { class: "sh-pod-img" }, pod?.image ? h("img", { src: pod.image, alt: "" }) : h("div", { class: "sh-missing" }, "Podcast görseli yok")),
+            pod?.text ? h("div", { class: "sh-pod-text fit", "data-fit": "Podcast açıklaması", "data-max": "10", "data-min": "7" },
+              pod.text.split(/\n+/).map((p) => h("p", {}, p))) : null)))),
     h("div", { class: "sh-foot1" }, "İnovakademi tarafından hazırlanmaktadır."));
 }
 

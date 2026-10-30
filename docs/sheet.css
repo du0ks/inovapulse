@@ -72,8 +72,13 @@
 .sh-event .fit p:nth-child(3) { margin-top: 1em; }
 .sh-event .fit p:nth-child(4), .sh-event .fit p:nth-child(5) { margin-top: 1em; }
 .sh-ev-title { font-weight: 700; }
-.sh-podcast { flex: 1; border-left: .3mm solid var(--line); display: flex; flex-direction: column; align-items: center; }
-.sh-pod-img { width: 47.5mm; flex: 1; min-height: 0; margin-bottom: 2mm; }
+.sh-podcast { flex: 1; border-left: .3mm solid var(--line); display: flex; flex-direction: column; }
+/* açıklama varsa görsel solda, metin sağda; yoksa görsel ortada */
+.sh-pod-row { flex: 1; display: flex; gap: 2.6mm; min-height: 0; justify-content: center; margin-bottom: 2mm; }
+.sh-pod-img { width: 47.5mm; flex: none; min-height: 0; }
+.sh-pod-row:has(.sh-pod-text) .sh-pod-img { width: 40mm; }
+.sh-pod-text { flex: 1; min-width: 0; line-height: 1.3; }
+.sh-pod-text p + p { margin-top: .55em; }
 .sh-pod-img > img { width: 100%; height: 100%; object-fit: contain; object-position: top center; }
 .sh-foot1 { position: absolute; right: 7.5mm; bottom: 1.2mm; font-size: 6.8pt; font-weight: 700; color: var(--navy); }
 

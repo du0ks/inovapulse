@@ -259,6 +259,8 @@ dialog::backdrop { background: rgba(15, 15, 20, .35); }
 .img-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 4px; font-size: 13.5px; color: var(--muted); }
 .img-tools .mini { width: 64px; height: 40px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); }
 .pod { display: flex; gap: 18px; align-items: flex-start; }
+.pod-body { flex: 1; min-width: 0; }
+.pod-text { margin: 0 0 8px; padding: 6px 8px; min-height: 3.2em; white-space: pre-wrap; line-height: 1.5; }
 .pod-img { width: 160px; border-radius: 8px; border: 1px solid var(--line); }
 .issue-edit { border-radius: 4px; padding: 0 2px; outline: none; }
 .issue-edit:hover, .issue-edit:focus { background: var(--accent-tint); }
