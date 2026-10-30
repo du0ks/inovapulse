@@ -25,7 +25,7 @@ kaydet"). Dosya adı `Inovakademi-Haftalik-Dis-Ticaret-Bulten-GG.AA.YYYY.pdf` ol
   önizlemede uyarı çıkar.
 - WCI grafiği `docs/data/wci_history.json`'dan çizilir (geçmiş veri: `python -m scripts.backfill_wci`);
   istenirse panelden Drewry grafiği görsel olarak yüklenebilir.
-- Podcast görseli panelden yüklenir, tarayıcıda saklanır ve değiştirilene kadar her hafta kullanılır.
+- Podcast görseli ve açıklaması panelden girilir, tarayıcıda saklanır ve değiştirilene kadar her hafta kullanılır. PDF'te açıklama görselin sağında yer alır.
 - Logo: `docs/assets/globby-logo.png` (daha yüksek çözünürlüklü dosya ile değiştirilebilir).
 
 ## Mimari (ücretsiz)
