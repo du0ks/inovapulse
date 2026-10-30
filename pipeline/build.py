@@ -16,7 +16,8 @@ from . import config, llm, prompts
 from .sources import (
     PAYWALLED, article_info, article_text, page_text, dedupe, fetch_bigpara, fetch_charts, fetch_drewry,
     fetch_event_listings, fetch_gnews, fetch_rss, fetch_tavily, fetch_ticaret, fetch_trade_official,
-    TRADE_WORDS, issue_number, log, reader_check, resolve_gnews, tr_holidays, vc_main_image,
+    TRADE_WORDS, issue_number, log, reader_check, resolve_gnews, shortlist_calendar, tr_holidays,
+    vc_main_image,
 )
 
 TR_TZ = timezone(timedelta(hours=3))
