@@ -26,6 +26,23 @@ session.mount("https://", HTTPAdapter(max_retries=_retry))
 session.mount("http://", HTTPAdapter(max_retries=_retry))
 
 
+def reader_check(url):
+    """Linkin okuyucunun tarayıcısında açılıp açılmayacağını tahmin eder: tek deneme, yeniden
+    deneme yok. Bizim tekrar tekrar deneyerek ancak açabildiğimiz bir sayfa okuyucuya da açılmaz.
+    Dönüş: (açılıyor mu, neden)"""
+    try:
+        r = requests.get(url, timeout=15, headers={
+            "User-Agent": config.USER_AGENT, "Accept": "text/html,application/xhtml+xml",
+            "Accept-Language": "tr-TR,tr;q=0.9"})
+    except Exception as ex:
+        return False, type(ex).__name__
+    if r.status_code != 200:
+        return False, f"HTTP {r.status_code}"
+    if len(r.text) < 2000 or "Just a moment" in r.text[:3000]:
+        return False, "boş/korumalı sayfa"
+    return True, None
+
+
 def log(msg):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
 
@@ -602,6 +619,22 @@ def fetch_event_listings():
             url = href if href.startswith("http") else "https://ticaret.gov.tr" + href
             out.append({"title": title, "url": url, "source": "T.C. Ticaret Bakanlığı",
                         "published": None, "snippet": "", "region": "tr"})
+    # Ticaret Bakanlığı TAGM: ticaret müşavirleriyle haftalık çevrim içi sohbet toplantıları
+    try:
+        d = session.get("https://tagm.ticaret.gov.tr/haberler", timeout=25).text
+        for href in dict.fromkeys(re.findall(r'href="(/haberler/[^"]*(?:sohbet|egitim|webinar|seminer)[^"]*)"', d)):
+            m = re.search(r"(\d{2})-(\d{2})-(20\d\d)$", href)
+            if m and f"{m.group(3)}-{m.group(2)}-{m.group(1)}" < date.today().isoformat():
+                continue  # geçmiş toplantı
+            title = clean_text(href.rsplit("/", 1)[-1].rsplit("-", 3)[0].replace("-", " "), 300)
+            m2 = re.search(r'href="' + re.escape(href) + r'"[^>]*>(.*?)</a>', d, flags=re.S)
+            if m2 and clean_text(m2.group(1), 300):
+                title = clean_text(m2.group(1), 300)
+            out.append({"title": title, "url": "https://tagm.ticaret.gov.tr" + href,
+                        "source": "T.C. Ticaret Bakanlığı", "published": None,
+                        "snippet": f"Tarih: {m.group(1)}.{m.group(2)}.{m.group(3)}" if m else "", "region": "tr"})
+    except Exception as ex:
+        log(f"  ! TAGM: {ex}")
     # Uludağ İhracatçı Birlikleri Akademi: gelecek online eğitimler (çoğu ücretsiz)
     try:
         d = session.get("https://uib.org.tr/tr/akademi-egitimler", timeout=25).text

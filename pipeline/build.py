@@ -7,6 +7,8 @@ import argparse
 import json
 import re
 import traceback
+from collections import Counter
+from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 
@@ -14,7 +16,7 @@ from . import config, llm, prompts
 from .sources import (
     PAYWALLED, article_info, article_text, page_text, dedupe, fetch_bigpara, fetch_charts, fetch_drewry,
     fetch_event_listings, fetch_gnews, fetch_rss, fetch_tavily, fetch_ticaret, fetch_trade_official,
-    issue_number, log, resolve_gnews, shortlist_calendar, tr_holidays, vc_main_image,
+    TRADE_WORDS, issue_number, log, reader_check, resolve_gnews, tr_holidays, vc_main_image,
 )
 
 TR_TZ = timezone(timedelta(hours=3))
@@ -90,7 +92,44 @@ def build_news(section, candidates, count, reserve, today, since):
     ok = verify_news(picked, since)
     if len(ok) < count:
         log(f"  ! {section}: doğrulanan haber sayısı {len(ok)}")
-    return {"items": ok[:count], "reserve": ok[count:]}
+    items, rest = diversify(ok, count, since)
+    return {"items": items, "reserve": rest}
+
+
+def site(url):
+    """Haberin geldiği site (ör. trthaber.com, ticaret.gov.tr)."""
+    parts = urlparse(url or "").netloc.lower().removeprefix("www.").split(".")
+    n = 3 if len(parts) >= 3 and parts[-1] == "tr" and parts[-2] in ("gov", "com", "org", "edu", "net", "bel") else 2
+    return ".".join(parts[-n:])
+
+
+MAX_PER_SITE = 2
+
+
+def diversify(news, count, since):
+    """Aynı siteden en fazla MAX_PER_SITE haber. Sınırı aşan haber için önce aynı haberin başka bir
+    sitedeki versiyonu denenir; yoksa yedeğe kalır. Haber sayısı dolmazsa sınır bir artırılır."""
+    for cap in (MAX_PER_SITE, MAX_PER_SITE + 1):
+        items, rest, used = [], [], {}
+        for it in news:
+            if len(items) < count and used.get(site(it["url"]), 0) >= cap:
+                for a in it.get("also_reported_by", []):
+                    if used.get(site(a["url"]), 0) >= cap:
+                        continue
+                    url, good, _ = check_link(a["url"], a.get("published"), since)
+                    if good:
+                        it = {**it, "url": url, "source": a["source"], "published": good["date"],
+                              "also_reported_by": [x for x in it["also_reported_by"] if x["url"] != a["url"]]}
+                        break
+            if len(items) < count and used.get(site(it["url"]), 0) < cap:
+                items.append(it)
+                used[site(it["url"])] = used.get(site(it["url"]), 0) + 1
+            else:
+                rest.append(it)
+        if len(items) >= count or len(items) == len(news):
+            break
+        log(f"  ! kaynak çeşitliliği: {cap} sınırıyla {len(items)} haber; sınır gevşetiliyor")
+    return items, rest
 
 
 MIN_ARTICLE_CHARS = 1200
@@ -289,6 +328,16 @@ def dates_in(text):
     return out
 
 
+# Birden çok etkinliği listeleyen sayfalar tek bir etkinlik linki olarak kullanılamaz
+LISTING_URL = re.compile(r"(uib\.org\.tr/tr/akademi-egitimler|ticaret\.gov\.tr/duyurular|"
+                         r"tagm\.ticaret\.gov\.tr/haberler|ito\.org\.tr/tr/etkinlikler)/?(\?.*)?$")
+LISTING_TITLE = re.compile(r"(^|[-–|:]\s*)(eğitimler|etkinlikler|duyurular|seminerler|webinarlar)\s*$", re.I)
+
+
+def is_listing(c):
+    return bool(LISTING_URL.search(c.get("url") or "") or LISTING_TITLE.search(c.get("title") or ""))
+
+
 def build_event(candidates, today):
     """Adayların sayfalarını açar, LLM ile tarih/online/ücret bilgisini çıkarır ve kuralları kodla
     uygular: ileri tarihli, çevrim içi ve ücretsiz olmayan hiçbir etkinlik seçilmez."""
@@ -296,7 +345,7 @@ def build_event(candidates, today):
     def past(c):
         ds = dates_in(f"{c['title']} {c.get('snippet') or ''}")
         return bool(ds) and max(ds) < today
-    candidates = [dict(c) for c in candidates if not past(c)][:35]
+    candidates = [dict(c) for c in candidates if not past(c) and not is_listing(c)][:35]
 
     def enrich(c):
         c["url"] = resolve_gnews(c["url"])
@@ -312,7 +361,7 @@ def build_event(candidates, today):
         candidates = list(ex.map(enrich, candidates))
     # Sayfası 6 aydan eski olanlar neredeyse her zaman geçmiş etkinliktir
     old = (today - timedelta(days=180)).isoformat()
-    candidates = [c for c in candidates if not (c.get("page_date") and c["page_date"] < old)]
+    candidates = [c for c in candidates if not (c.get("page_date") and c["page_date"] < old) and not is_listing(c)]
     lines = "\n".join(
         f"{i} | {c.get('page_date') or (c.get('published') or '')[:10] or '-'} | {c['source']} | {c['title']} | "
         f"{(c.get('snippet') or '')[:2000]}" for i, c in enumerate(candidates))
@@ -338,6 +387,8 @@ def build_event(candidates, today):
         last = end or start
         why = (None if last and last >= t else "tarih yok/geçmiş") or \
               (None if not start or start >= t else "başlamış/devam eden program") or \
+              (None if not (start and end) or (date.fromisoformat(end) - date.fromisoformat(start)).days <= 5
+               else "çok günlü seri/program") or \
               (None if (start or last) <= limit else "çok ileri tarih") or \
               (None if x.get("online") is True else "çevrim içi değil") or \
               (None if x.get("free") is True else "ücretsiz değil") or \
@@ -363,29 +414,59 @@ def build_event(candidates, today):
     soon = (today + timedelta(days=21)).isoformat()
     ok.sort(key=lambda e: ((e["start_date"] or e["end_date"]) > soon, -(e["relevance"] or 0),
                            e["start_date"] or e["end_date"]))
+    ok = usable_event_links(ok)
     return {"selected": ok[0] if ok else None, "alternatives": ok[1:5]}
 
 
-def build_calendar(days, events):
-    short = shortlist_calendar(events)
-    lines = "\n".join(
-        f"{e['date']} | {e['time']} | {e['country']} | {e['indicator']} | {e['priority']} | "
-        f"{e['previous'] or '-'} | {e['consensus'] or '-'}" for e in short
-    )
-    def check(o):
-        if len(o.get("days") or []) < 4:
-            raise ValueError("gün listesi eksik")
-        llm.require_turkish([d.get("text") for d in o["days"]], 0.5)
+def usable_event_links(events):
+    """Okuyucunun açabileceği linki olan etkinlikler. Kayıt linki açılmıyorsa etkinliğin kendi
+    sayfasına düşülür; o da açılmıyorsa etkinlik elenir."""
+    out = []
+    for e in events:
+        for url in dict.fromkeys(filter(None, (e.get("register_url"), e.get("source_url")))):
+            if LISTING_URL.search(url):
+                continue
+            good, why = reader_check(url)
+            if good:
+                out.append({**e, "register_url": url})
+                break
+            log(f"    – etkinlik linki açılmıyor: {url} ({why})")
+        if len(out) >= 5:
+            break
+    return out
 
-    out = llm.ask_json(prompts.CAL_SYSTEM, prompts.CAL_USER.format(days=", ".join(days), events=lines),
-                       max_tokens=8000, check=check)
+
+FOREIGN_TRADE = re.compile(r"ithalat|ihracat|dış ticaret|ticaret dengesi|ticaret açığı", re.I)
+PARTNERS = ["Almanya", "ABD", "Çin", "İngiltere", "Euro Bölgesi", "Rusya", "Irak", "İtalya", "Fransa",
+            "İspanya", "Hollanda", "Japonya", "Hindistan", "Güney Kore", "Kanada", "Brezilya"]
+
+
+def pick_release(events):
+    """Bir günün açıklaması (editör kuralı): Türkiye açıklaması varsa o; yoksa başka bir ülkenin dış
+    ticaret açıklaması (büyük ticaret ortakları önce); o da yoksa en önemli makro veri."""
+    def rank(e):
+        ind = e["indicator"] or ""
+        return (not FOREIGN_TRADE.search(ind), not TRADE_WORDS.search(ind), -(e["priority"] or 0),
+                PARTNERS.index(e["country"]) if e["country"] in PARTNERS else len(PARTNERS),
+                "Aylık" in ind, e["time"] or "")
+    tr = [e for e in events if e["country"] == "Türkiye"]
+    trade = [e for e in events if FOREIGN_TRADE.search(e["indicator"] or "")]
+    pool = tr or trade or [e for e in events if TRADE_WORDS.search(e["indicator"] or "") or e["priority"] >= 3]
+    return min(pool, key=rank) if pool else None
+
+
+def build_calendar(days, events):
+    out = {"days": []}
+    for day in days:
+        e = pick_release([x for x in events if x["date"] == day])
+        if e:
+            ind = e["indicator"].replace("İstanbul Sanayi Odası (İSO)", "İSO")
+            out["days"].append({"date": day, "text": f"{e['country']} {ind} açıklanacak.",
+                                "country": e["country"], "time": e["time"]})
     add_holidays(out, days)
-    for d in out.get("days", []):
-        try:
-            d["weekday"] = WEEKDAYS[date.fromisoformat(d["date"]).weekday()]
-            d["date_tr"] = tr_date(date.fromisoformat(d["date"]))
-        except (KeyError, ValueError):
-            pass
+    for d in out["days"]:
+        d["weekday"] = WEEKDAYS[date.fromisoformat(d["date"]).weekday()]
+        d["date_tr"] = tr_date(date.fromisoformat(d["date"]))
     return out
 
 
@@ -415,16 +496,25 @@ SECTIONS = {"tr_news": "Türkiye haberleri", "intl_news": "Yurt dışı haberler
             "charts": "Grafik haberleri"}
 
 
+def news_ok(x):
+    items = x.get("items") or []
+    per_site = Counter(site(i.get("url")) for i in items)
+    return len(items) >= 8 and max(per_site.values(), default=0) <= MAX_PER_SITE + 1
+
+
 def complete_sections(old, today):
     """Aynı tarihli mevcut taslakta eksiksiz olan bölümler (tekrar çalıştırmada yeniden üretilmez)."""
     warned = " ".join(old.get("warnings") or [])
     ok = set()
     checks = {
-        "tr_news": lambda x: len(x.get("items") or []) >= 8,
-        "intl_news": lambda x: len(x.get("items") or []) >= 8,
+        "tr_news": news_ok,
+        "intl_news": news_ok,
         "trade_data": lambda x: x.get("exports_billion_usd") is not None and x.get("imports_billion_usd") is not None,
-        "event": lambda x: bool(x.get("selected")),
-        "next_week": lambda x: len(x.get("days") or []) >= 5,
+        # Cuma sabahı link yeniden denenir: gece açılan sayfa sabah açılmıyorsa etkinlik yeniden seçilir
+        "event": lambda x: bool(x.get("selected")) and not LISTING_URL.search(x["selected"].get("register_url") or "")
+                           and reader_check(x["selected"].get("register_url") or "")[0],
+        "next_week": lambda x: len(x.get("days") or []) >= 5 and all(
+            d.get("holiday") or (d.get("country") and d.get("text", "").startswith(d["country"])) for d in x["days"]),
         "charts": lambda x: len(x.get("items") or []) >= 2,
         "wci": lambda x: bool(x.get("paragraphs")) and (x.get("assessment_date") or "") >= (
             today - timedelta(days=2)).isoformat(),

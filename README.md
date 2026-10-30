@@ -8,10 +8,10 @@ Her hafta perşembeyi cumaya bağlayan gece bülten taslağını otomatik hazır
 | 1 | Drewry WCI (US$/40ft) | drewry.co.uk (perşembe verisi) | Sayfa metni çekilir, Türkçe 2 paragraf özet + hat tablosu, Drewry grafikleri panelde gömülü |
 | 2 | Türkiye ihracat / ithalat | Ticaret Bakanlığı "<Ay> Ayı Dış Ticaret Verileri" haberi | Rakamlar doğrudan resmî metinden okunur (LLM yok); yıllık kutu `config.ANNUAL_EXPORTS_OVERRIDE` |
 | 3 | Grafik haberleri (2) | Visual Capitalist RSS | Ekonomi/ticaret konulu iki infografik, görsel linki + Türkçe paragraf |
-| 4 | Ücretsiz etkinlik | Ticaret Bakanlığı duyuruları, İTO etkinlikleri, Tavily, Google News | Sayfalar açılır; yalnızca ileri tarihli, online ve ücretsiz olanlar seçilir |
-| 5 | Türkiye'deki gelişmeler (10) | Ticaret Bakanlığı, AA, Dünya, Ekonomim, Bloomberg HT, Foreks, TRT, Hürriyet, Google News, Tavily | Tekrarlar birleştirilir; her link açılıp içerik ve tarih kontrol edilir (abonelik duvarlı, kısa veya eski haberler elenir) |
+| 4 | Ücretsiz etkinlik | Ticaret Bakanlığı duyuruları ve TAGM müşavir toplantıları, UİB Akademi, İTO etkinlikleri, Tavily, Google News | Sayfalar açılır; yalnızca ileri tarihli, online, ücretsiz, tek bir etkinliğe ait (liste sayfası değil) olanlar seçilir. Link, okuyucu gibi tek denemede açılmalı; cuma sabahı tekrar denenir, açılmıyorsa başka etkinlik seçilir |
+| 5 | Türkiye'deki gelişmeler (10) | Ticaret Bakanlığı, AA, Dünya, Ekonomim, Bloomberg HT, Foreks, TRT, Hürriyet, Google News, Tavily | Tekrarlar birleştirilir; her link açılıp içerik ve tarih kontrol edilir (abonelik duvarlı, kısa veya eski haberler elenir); aynı siteden en fazla 2 haber |
 | 6 | Yurt dışı gelişmeler (10) | AA English, WTO, Google News (EN), Tavily | Aynı |
-| 7 | Gelecek hafta | Bigpara ekonomik takvim API + resmî tatiller | Her gün için dış ticarete en ilgili veri; bayram günleri otomatik yazılır |
+| 7 | Gelecek hafta | Bigpara ekonomik takvim API + resmî tatiller | Kodla seçilir: o gün Türkiye açıklaması varsa o, yoksa başka ülkenin dış ticaret açıklaması, o da yoksa en önemli makro veri. Metin ülke adıyla başlar; bayram günleri otomatik yazılır |
 
 Kaynak ve anahtar kelimeler `pipeline/config.py`, editoryal kurallar `pipeline/prompts.py` içinde.
 

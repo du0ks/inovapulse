@@ -31,6 +31,8 @@ Seçim kuralları:
    resmî bildirimleri (ör. WTO bildirim/notification sayfaları) tercih etme; aynı haberin açık
    erişimli bir kaynağı varsa onu seç.
 9. Tarihi belirsiz veya kapsanan dönemden eski görünen (URL'de eski tarih geçen vb.) haberleri alma.
+10. Kaynak çeşitliliği: aynı siteden en fazla 2 haber seç. Aynı haber başka sitelerde de varsa
+   onları alt_ids'e ekle.
 
 {STYLE}
 
@@ -146,6 +148,8 @@ Kurallar:
   lojistik, sürdürülebilirlik, finans, girişimcilik konularına yakınlığı. Konu dışı (sürücü eğitimi,
   kuru temizleme, sağlık mevzuatı vb.) 1-3 puan.
 - Etkinlik olmayan sayfalar (haber, duyuru listesi, genel kurs sitesi) için is_event: false.
+- Her aday TEK bir etkinliktir. Sayfa birden çok eğitimi/etkinliği listeliyorsa is_event: false;
+  birkaç eğitimi birleştirip tek bir etkinlik gibi yazma.
 Örnek açıklama: "Eğitim içeriğinde katılımcılara, iletişim becerileri kazandırmayı ve kurum içindeki
 verimlilik ile performansı artırmaya yönelik çözümler sunmayı hedefleyerek, ..."
 {STYLE}"""
@@ -159,21 +163,3 @@ Her aday için bir kayıt döndür. Yalnızca şu JSON'u döndür:
 
 ADAYLAR (id | sayfa tarihi | kaynak | başlık | sayfa metni):
 {candidates}"""
-
-CAL_SYSTEM = """Sen İnovakademi'nin Haftalık Dış Ticaret Bülteni editörüsün. "Gelecek Haftanın
-Bilgilendirmesi" bölümü için ekonomik takvimden her gün (Pazartesi-Cumartesi) için dış ticaret
-açısından en önemli TEK veri açıklamasını seç. Öncelik: ithalat/ihracat/dış ticaret dengesi
-verileri (özellikle Türkiye ve büyük ticaret ortakları: AB, Almanya, ABD, Çin, BK, Rusya, Irak),
-sonra cari denge, GSYH, PMI, enflasyon, faiz kararları, rezervler. Türkiye verilerine öncelik ver.
-
-Örnek metin biçimi: "Meksika GSYH Büyüme Oranı (Yıllık) açıklanacak.",
-"Türkiye İthalat İhracat (Final) açıklanacak.", "Suudi Arabistan Dış Ticaret Dengesi açıklanacak." """
-
-CAL_USER = """Günler: {days}
-Yalnızca şu JSON'u döndür:
-{{"days": [{{"date": "YYYY-AA-GG", "text": "… açıklanacak.", "country": "...", "time": "SS:SS"}}],
- "highlight": {{"date": "YYYY-AA-GG", "text": "Haftanın en önemli dış ticaret verisi, 1-2 cümle açıklama"}}}}
-Bir gün için uygun veri yoksa o günün text alanına en önemli makro veriyi yaz.
-
-TAKVİM (tarih | saat | ülke | gösterge | önem 1-3 | önceki | beklenti):
-{events}"""
