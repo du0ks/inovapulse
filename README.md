@@ -17,7 +17,7 @@ Kaynak ve anahtar kelimeler `pipeline/config.py`, editoryal kurallar `pipeline/p
 
 ## PDF çıktısı
 
-Paneldeki **PDF indir** bülteni Canva'daki iki sayfalık A4 düzeninde (`docs/sheet.js`, `docs/sheet.css`)
+Paneldeki **PDF indir** bülteni üç sayfalık A4 düzeninde (1: WCI, rakamlar, grafikler · 2: etkinlik, podcast, Türkiye haberleri · 3: yurt dışı haberleri, takvim, yasal uyarı) (`docs/sheet.js`, `docs/sheet.css`)
 önizletir; **PDF olarak kaydet** tarayıcının yazdırma penceresini açar (Chrome/Edge, Hedef: "PDF olarak
 kaydet"). Dosya adı `Inovakademi-Haftalik-Dis-Ticaret-Bulten-GG.AA.YYYY.pdf` olarak önerilir.
 
@@ -89,3 +89,6 @@ GitHub yerine bir Linux sunucuda: repoyu klonlayın, crontab'a ekleyin ve `docs/
 - Haber kutucuğuyla çıkarın, ↑↓ ile sıralayın, yedeklerden "+" ile ekleyin.
 - Bölüm bazında veya "Tümünü kopyala" ile Canva'ya yapıştırın; "Yazdır / PDF" sade bir çıktı verir.
 - "Tüm aday haberler" bölümünde sistemin taradığı her şey aranabilir.
+
+Önceki iki sayfalık tasarımın yedeği: `yedek-2sayfa` dalı ve `yedek-2sayfa-2026-11-01` etiketi
+(geri dönmek için: `git checkout yedek-2sayfa -- docs/sheet.js docs/sheet.css`).

@@ -1,104 +1,114 @@
-/* PDF çıktısı: Canva bülteninin iki sayfalık A4 düzeni. Ölçüler referans PDF'ten mm olarak alınmıştır. */
+/* PDF çıktısı: üç sayfalık A4 bülten. Ölçüler mm. */
 
 #sheet { display: none; }
 .sh-page {
-  --navy: #003f6b; --blue: #004aac; --gray: #535353; --line: #8c8c8c;
-  --cal-h: #a6d9d9; --cal-b: #d6efef;
+  --navy: #003f6b; --blue: #004aac; --ink: #1c1f24; --muted: #5d6673; --rule: #d3dae2; --tint: #eef3f8;
+  --cal-h: #a6d9d9; --cal-b: #e3f3f3;
   position: relative; width: 210mm; height: 297mm; overflow: hidden;
-  background: #fff; color: #000;
-  font-family: Roboto, Arial, sans-serif; font-size: 10pt; line-height: 1.25;
+  background: #fff; color: var(--ink);
+  font-family: Roboto, Arial, "Noto Color Emoji", sans-serif; font-size: 10pt; line-height: 1.4;
   -webkit-print-color-adjust: exact; print-color-adjust: exact;
 }
 .sh-page * { box-sizing: border-box; }
-.sh-page p { margin: 0; }
-.sh-frame { position: absolute; left: 6.8mm; right: 6.8mm; top: 5.6mm; bottom: 5.6mm; border: .7mm solid var(--navy); }
+.sh-page p, .sh-page figure, .sh-page dl, .sh-page dd, .sh-page h2, .sh-page h3, .sh-page h4 { margin: 0; }
+.sh-frame {
+  position: absolute; inset: 7mm; border: .6mm solid var(--navy);
+  display: flex; flex-direction: column; padding: 0 7mm;
+}
 
-/* üst bilgi (frame içi koordinatlar: page - 6.8mm / 5.6mm) */
-.sh-head { position: absolute; inset: 0 0 auto 0; height: 29.5mm; }
-.sh-logo { position: absolute; left: 9.2mm; top: 3.4mm; width: 36mm; }
-.sh-title { position: absolute; left: 0; right: 0; top: 10mm; text-align: center; font-size: 17pt; letter-spacing: .02em; }
-.sh-meta { position: absolute; right: 4.6mm; top: 9mm; width: 38.5mm; text-align: right; }
-.sh-date { font-weight: 700; font-size: 12.5pt; margin-bottom: 1.6mm; }
-.sh-issue { background: var(--navy); color: #fff; height: 11mm; line-height: 11mm; text-align: center; font-size: 14.5pt; }
-.sh-bar { position: absolute; left: 4mm; right: 4mm; top: 27.9mm; height: 1.6mm; background: var(--gray); }
+/* üst bilgi */
+.sh-head { flex: none; height: 25mm; display: flex; align-items: center; gap: 6mm; border-bottom: .8mm solid var(--navy); }
+.sh-logo { width: 32mm; flex: none; }
+.sh-title { flex: 1; text-align: center; font-size: 17pt; font-weight: 700; color: var(--navy); letter-spacing: .01em; }
+.sh-meta { flex: none; width: 40mm; text-align: right; white-space: nowrap; }
+.sh-date { font-weight: 700; font-size: 11pt; margin-bottom: 1.4mm; }
+.sh-issue { display: inline-block; background: var(--navy); color: #fff; border-radius: 1.5mm; padding: 1.3mm 4mm; font-size: 12pt; font-weight: 700; }
 
-.sh-page h3 { margin: 0 0 1.4mm; font-size: 12pt; font-weight: 700; line-height: 1.2; }
-.sh-src { font-size: 7.5pt; margin-top: 1.2mm; }
-.sh-missing { display: grid; place-items: center; width: 100%; height: 100%; background: #f1f1f1; color: #888; font-size: 8pt; }
-.fit { overflow: hidden; }
+/* gövde: bölümler alt alta, aralarında eşit boşluk */
+.sh-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6.5mm; padding: 6.5mm 0 5mm; }
+.sh-body > section, .sh-duo > section { display: flex; flex-direction: column; min-height: 0; }
+
+/* alt bilgi */
+.sh-foot { flex: none; height: 8mm; display: flex; align-items: center; justify-content: space-between; gap: 4mm;
+  border-top: .3mm solid var(--rule); font-size: 7pt; color: var(--muted); white-space: nowrap; }
+.sh-foot b { color: var(--navy); }
+
+/* başlık: kalın lacivert metin + sağa uzanan ince çizgi */
+.sh-h { display: flex; align-items: center; gap: 3mm; margin-bottom: 3mm; font-size: 12pt; font-weight: 700; color: var(--navy); line-height: 1.2; }
+.sh-h > span { flex: 0 1 auto; }
+.sh-h::after { content: ""; flex: 1 0 8mm; height: .3mm; background: var(--rule); }
+.sh-lead { font-size: 14pt; font-weight: 400; color: var(--blue); line-height: 1.3; margin-bottom: 4mm; }
+
+.sh-text { text-align: justify; hyphens: auto; }
+.sh-text p + p { margin-top: .7em; }
+.sh-src { font-size: 7pt; color: var(--muted); margin-top: 1.5mm; white-space: nowrap; }
+.sh-missing { display: grid; place-items: center; width: 100%; height: 100%; min-height: 30mm; background: #f1f1f1; color: #888; font-size: 8pt; }
+.fit { overflow: hidden; min-height: 0; }
 .fit.overflow { outline: .5mm dashed #d33; }
 
 /* 1. sayfa: WCI */
-.sh-wci {
-  position: absolute; left: 4mm; right: 4mm; top: 29.5mm; height: 74.5mm;
-  border: .3mm solid var(--line); border-top: 0; display: flex; gap: 2.5mm; padding: 6mm 3mm 5mm 3.5mm;
-}
-.sh-wci-text { flex: 0 0 115.5mm; display: flex; flex-direction: column; min-height: 0; }
-.sh-wci-text .fit { flex: 1; text-align: justify; line-height: 1.3; }
-.sh-wci-text .fit p + p { margin-top: 1em; }
-.sh-wci-chart { flex: 1; display: flex; flex-direction: column; min-width: 0; margin-top: -3mm; }
+.sh-wci { flex: none; height: 92mm; }
+.sh-wci-row { flex: 1; min-height: 0; display: flex; gap: 7mm; }
+.sh-wci-row > .fit { flex: 1; }
+.sh-wci-chart { flex: 0 0 76mm; display: flex; flex-direction: column; min-height: 0; }
 .sh-chart-box { flex: 1; min-height: 0; display: flex; }
 .sh-chart-box > img { width: 100%; height: 100%; object-fit: contain; }
 .wci-svg { width: 100%; height: 100%; font-family: Roboto, Arial, sans-serif; }
 .wci-svg .ax { font-size: 6.4px; fill: #333; }
 .wci-svg .grid { stroke: #e3e3e3; stroke-width: .5; }
-.wci-svg .line { fill: none; stroke: #1f2a44; stroke-width: 1.3; stroke-linejoin: round; }
+.wci-svg .line { fill: none; stroke: var(--navy); stroke-width: 1.4; stroke-linejoin: round; }
 
 /* 1. sayfa: rakam kutuları */
-.sh-figs { position: absolute; left: 4mm; right: 4mm; top: 107.6mm; height: 27mm; display: flex; justify-content: space-between; padding: 0 12.3mm 0 12.3mm; }
-.sh-fig { width: 42.3mm; text-align: center; display: flex; flex-direction: column; justify-content: space-between; }
-.sh-fig:nth-child(2) { margin-left: 3mm; }
-.sh-fig-lbl { font-size: 11pt; line-height: 1.25; }
-.sh-fig-val { background: var(--navy); color: #fff; height: 13.4mm; line-height: 13.4mm; border-radius: 2.4mm; font-size: 11.5pt; }
+.sh-figs { flex: none !important; flex-direction: row !important; gap: 5mm; }
+.sh-fig { flex: 1; background: var(--tint); border-top: 1mm solid var(--navy); border-radius: 0 0 2mm 2mm; padding: 3.5mm 4mm 4mm; text-align: center; }
+.sh-fig-lbl { font-size: 9pt; color: var(--muted); line-height: 1.25; margin-bottom: 1.8mm; }
+.sh-fig-val { font-size: 16pt; font-weight: 700; color: var(--navy); line-height: 1.1; white-space: nowrap; }
 
 /* 1. sayfa: grafik haberleri */
-.sh-charts { position: absolute; left: 4mm; right: 4mm; top: 136.4mm; height: 75mm; display: flex; border: .3mm solid var(--line); }
-.sh-cell { padding: 4mm 3.3mm 3mm 3.5mm; min-width: 0; }
-.sh-charts .sh-cell { flex: 1; display: flex; flex-direction: column; }
-.sh-charts .sh-cell + .sh-cell { border-left: .3mm solid var(--line); }
-.sh-chart-row { flex: 1; display: flex; gap: 2.6mm; min-height: 0; }
-.sh-chart-img { flex: 0 0 38.5mm; display: flex; flex-direction: column; min-height: 0; }
-.sh-chart-img > .sh-missing { width: 100%; height: 48mm; }
-/* uzun infografiğin yalnızca üst kısmı görünür; kısa/yatay görsel olduğu gibi */
-.sh-chart-img > img { width: 100%; height: auto; max-height: 48mm; flex: none; object-fit: cover; object-position: top center; }
-.sh-chart-img .sh-src { font-size: 6.6pt; white-space: nowrap; }
-.sh-chart-text { flex: 1; text-align: justify; line-height: 1.32; }
+/* grafikler alt alta: görsel solda, metin tam genişlikte sağda */
+.sh-charts { flex: 1 !important; gap: 6mm; }
+.sh-chart { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.sh-chart-row { flex: 1; min-height: 0; display: flex; gap: 6mm; }
+.sh-chart-img { flex: 0 0 44mm; display: flex; flex-direction: column; min-height: 0; }
+/* uzun infografiğin yalnızca üst kısmı görünür */
+.sh-chart-img > img { width: 100%; height: auto; max-height: 42mm; flex: none; object-fit: cover; object-position: top center; border: .3mm solid var(--rule); }
+.sh-chart-img > .sh-missing { height: 42mm; }
+.sh-chart-row > .fit { flex: 1; min-width: 0; }
 
-/* 1. sayfa: etkinlik + podcast */
-.sh-bottom { position: absolute; left: 4mm; right: 4mm; top: 211.4mm; bottom: 0; display: flex; border-left: .3mm solid var(--line); border-right: .3mm solid var(--line); }
-.sh-event { flex: 1; display: flex; flex-direction: column; }
-.sh-event .fit { flex: 1; text-align: justify; line-height: 1.3; }
-.sh-event .fit p + p { margin-top: .55em; }
-.sh-event .fit p:nth-child(3) { margin-top: 1em; }
-.sh-event .fit p:nth-child(4), .sh-event .fit p:nth-child(5) { margin-top: 1em; }
-.sh-ev-title { font-weight: 700; }
-.sh-podcast { flex: 1; border-left: .3mm solid var(--line); display: flex; flex-direction: column; }
+/* 2. sayfa: etkinlik + podcast */
+.sh-duo { flex: none; height: 84mm; display: flex; gap: 7mm; }
+.sh-duo > section { flex: 1; min-width: 0; }
+.sh-event > .fit { flex: 1; }
+.sh-ev-title { font-weight: 700; font-size: 1.08em; color: var(--ink); }
+.sh-facts { display: grid; grid-template-columns: auto 1fr; gap: 1mm 3mm; margin-top: .9em; padding: 2.5mm 3mm; background: var(--tint); border-radius: 1.5mm; text-align: left; }
+.sh-facts dt { font-weight: 700; color: var(--navy); }
+.sh-facts dd { min-width: 0; overflow-wrap: anywhere; }
 /* açıklama varsa görsel solda, metin sağda; yoksa görsel ortada */
-.sh-pod-row { flex: 1; display: flex; gap: 2.6mm; min-height: 0; justify-content: center; margin-bottom: 2mm; }
-.sh-pod-img { width: 47.5mm; flex: none; min-height: 0; }
-.sh-pod-row:has(.sh-pod-text) .sh-pod-img { width: 40mm; }
-.sh-pod-text { flex: 1; min-width: 0; line-height: 1.3; }
-.sh-pod-text p + p { margin-top: .55em; }
+.sh-pod-row { flex: 1; min-height: 0; display: flex; gap: 4mm; justify-content: center; }
+.sh-pod-img { flex: none; width: 52mm; min-height: 0; }
+.sh-pod-row:has(.sh-pod-text) .sh-pod-img { width: 38mm; }
 .sh-pod-img > img { width: 100%; height: 100%; object-fit: contain; object-position: top center; }
-.sh-foot1 { position: absolute; right: 7.5mm; bottom: 1.2mm; font-size: 6.8pt; font-weight: 700; color: var(--navy); }
+.sh-pod-text { flex: 1; min-width: 0; text-align: left; }
 
-/* 2. sayfa: haberler */
-.sh-news { position: absolute; left: 4mm; right: 4mm; top: 30.5mm; height: 208mm; line-height: 1.3; }
-.sh-news h2 { margin: 0 0 .5mm; color: var(--blue); font-size: 1.45em; font-weight: 700; line-height: 1.25; }
-.sh-news h4 { margin: .3em 0 .25em; color: var(--blue); font-size: 1.45em; font-weight: 400; line-height: 1.25; }
-.sh-news ul { margin: 0; padding: 0 0 0 4.5mm; list-style: none; }
-.sh-news li { position: relative; text-align: justify; margin-bottom: 1em; }
-.sh-news li::before { content: ""; position: absolute; left: -3.2mm; top: .5em; width: 1.2mm; height: 1.2mm; border-radius: 50%; background: #000; }
-.sh-news ul:last-of-type li:last-child { margin-bottom: 0; }
-.sh-disc { position: absolute; left: 4mm; right: 4mm; top: 239mm; text-align: center; font-style: italic; color: var(--blue); font-size: 7.4pt; line-height: 1.3; }
+/* 2-3. sayfa: haberler (iki sütun) */
+.sh-news { flex: 1 !important; }
+.sh-list { flex: 1; }
+.sh-list ul { margin: 0; padding: 0; list-style: none; columns: 2; column-gap: 8mm; column-fill: balance; height: 100%; }
+.sh-list li { position: relative; padding-left: 4mm; margin-bottom: .9em; text-align: justify; hyphens: auto; break-inside: avoid; }
+.sh-list li::before { content: ""; position: absolute; left: 0; top: .52em; width: 1.5mm; height: 1.5mm; background: var(--navy); }
 
-/* 2. sayfa: takvim */
-.sh-cal { position: absolute; left: 4mm; right: 4mm; top: 250.2mm; bottom: 1.2mm; display: flex; gap: 2.8mm; }
-.sh-day { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.sh-day-h { background: var(--cal-h); padding: 1.6mm 1.8mm; height: 11.5mm; font-weight: 700; font-size: 9.6pt; line-height: 1.15; }
-.sh-day-b { flex: 1; background: var(--cal-b); padding: 2.5mm 1.8mm; font-weight: 700; line-height: 1.3; }
-.sh-foot2 { position: absolute; left: 3mm; right: 7mm; bottom: 1.1mm; display: flex; justify-content: space-between; font-size: 7.2pt; color: #1d4f91; letter-spacing: .02em; }
-.sh-foot2 b { color: var(--navy); }
+/* 3. sayfa: takvim */
+.sh-week { flex: none !important; height: 37mm; }
+.sh-cal { flex: 1; min-height: 0; display: flex; gap: 2.5mm; }
+.sh-day { flex: 1; display: flex; flex-direction: column; min-width: 0; border-radius: 1.5mm; overflow: hidden; }
+.sh-day-h { background: var(--cal-h); padding: 1.6mm 2mm; line-height: 1.2; font-size: 9pt; display: flex; flex-direction: column; }
+.sh-day-h span { font-size: 8pt; }
+.sh-day-b { flex: 1; background: var(--cal-b); padding: 2mm; font-weight: 700; line-height: 1.3; }
+
+/* 3. sayfa: yasal uyarı */
+.sh-disc { flex: none !important; padding: 3mm 4mm; border: .3mm solid var(--rule); border-radius: 1.5mm; color: var(--muted); }
+.sh-disc h4 { font-size: 7.4pt; font-weight: 700; color: var(--navy); letter-spacing: .03em; margin-bottom: 1mm; }
+.sh-disc p { font-size: 6.6pt; line-height: 1.35; text-align: justify; hyphens: auto; }
 
 /* önizleme */
 #preview {

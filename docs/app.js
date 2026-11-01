@@ -467,7 +467,7 @@ const ACTIONS = {
     h("li", {}, "Üstteki sarı kutudaki maddeleri kontrol edip işaretleyin."),
     h("li", {}, "Değiştirmek istediğiniz metne tıklayıp yazın. Haberleri oklarla sıralayabilir, × ile çıkarabilir, “Önerilen diğer haberler”den ekleyebilirsiniz."),
     h("li", {}, "Podcast bölümünden haftanın podcast görselini yükleyin."),
-    h("li", {}, "“PDF indir” bülteni Canva'daki iki sayfalık düzende gösterir; eksik ya da taşan bir şey varsa üstte yazar. “PDF olarak kaydet” ile indirin."),
+    h("li", {}, "“PDF indir” bülteni üç sayfalık A4 düzeninde gösterir; eksik ya da taşan bir şey varsa üstte yazar. “PDF olarak kaydet” ile indirin."),
     h("li", {}, "Canva'da çalışmak isterseniz “Bülteni kopyala” ile metni alıp yapıştırabilirsiniz."))),
   rerun: () => {
     const url = actionsUrl();
