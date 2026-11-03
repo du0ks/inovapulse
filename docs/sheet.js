@@ -57,6 +57,18 @@ function uploadButton(label, onDone) {
   return h("button", { class: "btn small", type: "button", onclick: () => pickImage(onDone) }, label);
 }
 
+// PDF'te tıklanabilir bağlantı (Chrome/Edge PDF'e bağlantı olarak yazar)
+function pdfLink(url, text) {
+  return h("a", { class: "sh-a", href: url, target: "_blank", rel: "noopener" }, text);
+}
+
+// Metindeki adresleri kısa, tıklanabilir bağlantıya çevirir (uzun adres satırı taşırmasın)
+function linkify(text) {
+  return text.split(/(https?:\/\/[^\s]+)/).map((part, i) => i % 2
+    ? pdfLink(part.replace(/[.,;)]+$/, ""), `${shortHost(part).replace(/^www\./, "")} ↗`)
+    : part);
+}
+
 function dmy(iso) {
   const [y, m, d] = String(iso).slice(0, 10).split("-");
   return `${d}.${m}.${y}`;
@@ -162,7 +174,7 @@ function page1(problems) {
         fitBox("WCI metni", 10.5, 8, "sh-text", (w.paragraphs || []).map((p) => h("p", {}, p))),
         h("figure", { class: "sh-wci-chart" },
           h("div", { class: "sh-chart-box" }, chart || h("div", { class: "sh-missing" }, "Grafik yok")),
-          h("figcaption", { class: "sh-src" }, "Kaynak: www.drewry.co.uk")))),
+          h("figcaption", { class: "sh-src" }, "Kaynak: ", pdfLink(w.source_url || "https://www.drewry.co.uk/supply-chain-advisors/supply-chain-expertise/world-container-index-assessed-by-drewry", "www.drewry.co.uk"))))),
     h("section", { class: "sh-figs" }, cards.map((k) => h("div", { class: "sh-fig" },
       h("div", { class: "sh-fig-lbl" }, k.label),
       h("div", { class: "sh-fig-val" }, k.value || "—")))),
@@ -173,7 +185,7 @@ function page1(problems) {
         h("div", { class: "sh-chart-row" },
           h("figure", { class: "sh-chart-img" },
             c?.image ? h("img", { src: c.image, alt: "" }) : h("div", { class: "sh-missing" }, "Görsel yok"),
-            h("figcaption", { class: "sh-src" }, "Kaynak: www.visualcapitalist.com")),
+            h("figcaption", { class: "sh-src" }, "Kaynak: ", pdfLink(c?.url || "https://www.visualcapitalist.com", "www.visualcapitalist.com"))),
           fitBox(`${i + 1}. grafik haberi metni`, 10, 7.5, "sh-text", h("p", {}, c?.summary || ""))));
     })));
 }
@@ -202,13 +214,16 @@ function page2(problems) {
           h("dl", { class: "sh-facts" },
             fact("Tarih", e.date), fact("Saat", e.time),
             fact("Yer", [e.location, e.fee].filter(Boolean).join(", ")),
-            fact("Kayıt", shortHost(e.register_url))),
+            fact("Kayıt", e.register_url ? pdfLink(e.register_url, shortHost(e.register_url)) : "")),
         ] : null)),
       h("section", { class: "sh-podcast" },
         heading("İhracat Muhabbetleri Podcast"),
-        h("div", { class: "sh-pod-row" },
-          h("div", { class: "sh-pod-img" }, pod?.image ? h("img", { src: pod.image, alt: "" }) : h("div", { class: "sh-missing" }, "Podcast görseli yok")),
-          pod?.text ? fitBox("Podcast açıklaması", 10.5, 7.5, "sh-text sh-pod-text", pod.text.split(/\n+/).map((p) => h("p", {}, p))) : null))),
+        // Açıklama varsa görsel sola yaslanır, metin görselin yanından ve altından akar
+        pod?.text
+          ? fitBox("Podcast açıklaması", 10, 7, "sh-pod-text",
+            pod.image ? h("img", { class: "sh-pod-float", src: pod.image, alt: "" }) : null,
+            pod.text.split(/\n+/).map((p) => h("p", {}, linkify(p))))
+          : h("div", { class: "sh-pod-img" }, pod?.image ? h("img", { src: pod.image, alt: "" }) : h("div", { class: "sh-missing" }, "Podcast görseli yok")))),
     h("section", { class: "sh-news" },
       h("h2", { class: "sh-lead" }, "Türkiye ve yurt dışında bu hafta hangi gelişmeler oldu? Birlikte bir göz atalım."),
       heading("Türkiye'deki Gelişmeler"),
