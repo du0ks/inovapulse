@@ -22,11 +22,31 @@ Paneldeki **PDF indir** bülteni üç sayfalık A4 düzeninde (1: WCI, rakamlar,
 kaydet"). Dosya adı `Inovakademi-Haftalik-Dis-Ticaret-Bulten-GG.AA.YYYY.pdf` olarak önerilir.
 
 - Paneldeki tüm düzenlemeler PDF'e yansır. Metin kutulara sığmazsa yazı boyutu küçülür; yine sığmazsa
-  önizlemede uyarı çıkar.
+  önizlemede uyarı çıkar. Haberler iki sütuna ölçülerek dizilir; en küçük boyutta da sığmayan haber
+  çıkarılır ve önizlemede adıyla yazılır, sessizce kaybolmaz.
+- Önizleme "Göndermeden düzeltin" ile "Bilgi" uyarılarını ayırır. Boş bölüm PDF'te boş kutu bırakmaz.
 - WCI grafiği `docs/data/wci_history.json`'dan çizilir (geçmiş veri: `python -m scripts.backfill_wci`);
   istenirse panelden Drewry grafiği görsel olarak yüklenebilir.
 - Podcast görseli ve açıklaması panelden girilir, tarayıcıda saklanır ve değiştirilene kadar her hafta kullanılır. PDF'te açıklama görselin sağında yer alır.
 - Logo: `docs/assets/globby-logo.png` (daha yüksek çözünürlüklü dosya ile değiştirilebilir).
+
+## Yedekler (kaynak düşerse)
+
+| Bölüm | Sıra |
+|---|---|
+| Haberler | Link kontrolü → içerik eşiği 600 karakter → kalan adaylardan yeniden seçim → 14 günlük dönem → eldeki haber. LLM'lerin hepsi düşerse kaynak metinden ilk cümleler |
+| Özet uzunluğu | Haber başına en fazla 340 karakter (bu uzunlukta 10 haber en az 8,5 puntoyla sığar): LLM kısaltır, olmazsa cümle sınırından kesilir |
+| WCI | Rakam son değerden ±%40 saparsa kullanılmaz. LLM yoksa rakamlardan kalıp metin, kaynak yoksa son geçerli değerlendirme |
+| Dış ticaret | Bakanlık → haberlerden LLM → önceki bülten. Makul aralık dışındaki rakam kullanılmaz |
+| Grafikler | Son 7 gün → 30 gün; geçen hafta kullanılanlar hariç. Görsel açılmazsa metin tam genişlik |
+| Etkinlik | 75 gün → 120 gün → geçen haftanın hâlâ ileri tarihli etkinliği → eğitim takvimi yönlendirmesi |
+| Takvim | Her zaman pazartesi-cumartesi. Türkiye → dış ticaret → makro → o günün herhangi bir verisi → "Önemli bir veri açıklaması beklenmiyor." |
+
+Yedek kullanıldığında panelin kontrol listesine ve PDF önizlemesine not düşer (`notices`). Zamanlanmış
+çalıştırma cuma 11:00'den sonra mevcut içeriğe dokunmaz, yalnızca tamamen boş bölümleri doldurur.
+
+Testler: `python -m unittest tests.test_pipeline` (ağsız) ve
+`uvx --with playwright python tests/pdf_matrix.py` (PDF senaryoları).
 
 ## Mimari (ücretsiz)
 

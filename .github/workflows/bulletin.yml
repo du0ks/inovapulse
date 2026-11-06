@@ -84,6 +84,7 @@ jobs:
           python -m pipeline.build
           ${{ inputs.date && format('--date {0}', inputs.date) || '' }}
           ${{ (github.event_name == 'schedule' || inputs.fill_missing) && '--fill-missing' || '' }}
+          ${{ github.event_name == 'schedule' && '--scheduled' || '' }}
 
       - name: Deneme çıktısını sakla
         if: inputs.dry_run
@@ -99,7 +100,13 @@ jobs:
           git config user.email "73953584+du0ks@users.noreply.github.com"
           git add docs/data
           git diff --cached --quiet || git commit -m "Bülten: $(TZ=Europe/Istanbul date +%F)"
-          git push
+          # Bu arada başka bir commit geldiyse (panel güncellemesi, başka çalıştırma) üstüne alınır
+          for i in 1 2 3 4 5; do
+            git push && exit 0
+            sleep 10
+            git pull --rebase origin main
+          done
+          exit 1
 
   deploy:
     needs: build

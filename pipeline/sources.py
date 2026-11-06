@@ -260,7 +260,7 @@ def next_week_days(today):
 def fetch_bigpara(today):
     days = next_week_days(today)
     tr_tz = timezone(timedelta(hours=3))
-    events = []
+    events, failed = [], []
     for day in days:
         try:
             r = session.get(
@@ -275,6 +275,7 @@ def fetch_bigpara(today):
             data = r.json().get("data") or []
         except Exception as ex:
             log(f"  ! Bigpara {day}: {ex}")
+            failed.append(day.isoformat())
             continue
         for x in data:
             dt = datetime.fromtimestamp(x["ts"], tz=tr_tz)
@@ -291,7 +292,7 @@ def fetch_bigpara(today):
             })
         time.sleep(0.5)
     log(f"  Bigpara: {len(events)} etkinlik ({days[0]} - {days[-1]})")
-    return [d.isoformat() for d in days], events
+    return [d.isoformat() for d in days], events, failed
 
 
 TRADE_WORDS = re.compile(

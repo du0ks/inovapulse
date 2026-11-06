@@ -36,8 +36,8 @@ Seçim kuralları:
 
 {STYLE}
 
-Her özet 2-3 cümle, 40-70 kelime olsun. Kaynak İngilizce olsa bile başlık ve özet MUTLAKA
-Türkçe olmalı."""
+Her özet 2 cümle, 35-50 kelime ve en fazla 340 karakter olsun. Kaynak İngilizce olsa bile başlık ve
+özet MUTLAKA Türkçe olmalı."""
 
 NEWS_USER = """Bölüm: {section}
 Bugün: {today}. Kapsanan dönem: {since} - {today}.
@@ -56,15 +56,27 @@ ADAYLAR (id | tarih | kaynak | başlık | özet):
 
 REFINE_SYSTEM = f"""Sen İnovakademi'nin Haftalık Dış Ticaret Bülteni editörüsün. Sana seçilmiş haberlerin
 taslak özetleri ve (varsa) haberin tam metninden bir kesit verilecek. Tam metne dayanarak özeti
-doğrula ve gerekirse düzelt/zenginleştir. Tam metin yoksa taslağı aynen bırak.
+doğrula, yanlışsa düzelt. Metni uzatma; bülten sayfasında yer sınırlı. Tam metin yoksa taslağı aynen bırak.
 
 {STYLE}
 
-Her özet 2-3 cümle, 40-70 kelime."""
+Her özet 2 cümle, 35-50 kelime ve en fazla 340 karakter."""
 
 REFINE_USER = """Yalnızca şu JSON'u döndür: {{"items": [{{"key": "<anahtar>", "title": "...", "summary": "..."}}]}}
 
 HABERLER:
+{items}"""
+
+SHORTEN_SYSTEM = f"""Sen İnovakademi'nin Haftalık Dış Ticaret Bülteni editörüsün. Sana bülten özetleri
+verilecek. Her birini anlamı ve rakamları koruyarak kısalt; yeni bilgi ekleme.
+
+{STYLE}
+
+Her özet 2 cümle ve en fazla {{limit}} karakter."""
+
+SHORTEN_USER = """Yalnızca şu JSON'u döndür: {{"items": [{{"key": "<anahtar>", "summary": "..."}}]}}
+
+ÖZETLER:
 {items}"""
 
 WCI_SYSTEM = f"""Sen İnovakademi'nin Haftalık Dış Ticaret Bülteni editörüsün. Drewry World Container Index

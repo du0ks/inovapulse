@@ -16,8 +16,8 @@ from . import config, llm, prompts
 from .sources import (
     PAYWALLED, article_info, article_text, page_text, dedupe, fetch_bigpara, fetch_charts, fetch_drewry,
     fetch_event_listings, fetch_gnews, fetch_rss, fetch_tavily, fetch_ticaret, fetch_trade_official,
-    TRADE_WORDS, issue_number, log, reader_check, register_link, resolve_gnews, shortlist_calendar,
-    tr_holidays, vc_main_image,
+    TRADE_WORDS, issue_number, log, next_week_days, reader_check, register_link, resolve_gnews,
+    shortlist_calendar, tr_holidays, vc_main_image,
 )
 
 TR_TZ = timezone(timedelta(hours=3))
@@ -54,7 +54,11 @@ def pick(items, idx):
 
 # --- Bölümler --------------------------------------------------------------
 
-def build_news(section, candidates, count, reserve, today, since):
+MIN_SUMMARY_CHARS = 80
+
+
+def select_news(section, candidates, count, reserve, today, since):
+    """LLM'e haber seçtirip sonuçları aday bilgileriyle eşleştirir (özeti boş olanlar elenir)."""
     def check(o):
         items = o.get("items") or []
         if len(items) < count // 2:
@@ -72,7 +76,7 @@ def build_news(section, candidates, count, reserve, today, since):
 
     def resolve(x):
         c = pick(candidates, x.get("id"))
-        if not c:
+        if not c or len((x.get("summary") or "").strip()) < MIN_SUMMARY_CHARS:
             return None
         alts = [pick(candidates, a) for a in x.get("alt_ids") or []]
         return {
@@ -89,12 +93,130 @@ def build_news(section, candidates, count, reserve, today, since):
                                  for a in alts if a],
         }
 
-    picked = [r for r in map(resolve, out.get("items", []) + out.get("reserve", [])) if r]
+    return [r for r in map(resolve, out.get("items", []) + out.get("reserve", [])) if r]
+
+
+def build_news(section, candidates, count, reserve, today, since, wider=None):
+    """Haber sayısı dolmazsa sırayla: içerik eşiği düşürülür, kalan adaylardan yeniden seçilir,
+    daha geniş dönemin adayları denenir. Yine dolmazsa eldeki haberle devam edilir."""
+    picked = select_news(section, candidates, count, reserve, today, since)
     ok = verify_news(picked, since)
+
+    if len(ok) < count:
+        log(f"  ! {section}: doğrulanan haber {len(ok)}; içerik eşiği düşürülüyor")
+        passed = {id(x) for x in ok}
+        ok += verify_news([x for x in picked if id(x) not in passed], since, MIN_ARTICLE_CHARS_RELAXED)
+
+    def more(pool, since_):
+        """Daha önce seçilmemiş adaylardan ek seçim."""
+        used = {x["original_title"] for x in picked}
+        rest = [c for c in pool if c["title"] not in used]
+        if not rest:
+            return []
+        try:
+            extra = select_news(section, rest, count - len(ok), reserve, today, since_)
+        except Exception as ex:
+            log(f"  ! {section}: ek seçim yapılamadı: {ex}")
+            return []
+        picked.extend(extra)
+        return verify_news(extra, since_, MIN_ARTICLE_CHARS_RELAXED)
+
+    if len(ok) < count:
+        log(f"  ! {section}: {len(ok)} haber; kalan adaylardan yeniden seçiliyor")
+        ok += more(candidates, since)
+    note = None
+    if len(ok) < count and wider:
+        log(f"  ! {section}: {len(ok)} haber; dönem genişletiliyor")
+        pool, since_wide = wider()
+        ok += more(pool, since_wide)
+        note = f"{section}: son 7 günde yeterli haber bulunamadı; dönem 14 güne genişletildi."
     if len(ok) < count:
         log(f"  ! {section}: doğrulanan haber sayısı {len(ok)}")
+        note = f"{section}: yalnızca {min(len(ok), count)} haber doğrulanabildi."
     items, rest = diversify(ok, count, since)
-    return {"items": items, "reserve": rest}
+    sec = {"items": items, "reserve": rest}
+    if note:
+        sec["note"] = note
+    return sec
+
+
+def fallback_news(candidates, since, count):
+    """LLM'lerin hepsi düşerse: Türkçe başlıklı adayların kendi metninden ilk cümlelerle özet."""
+    out = []
+    for c in candidates[:40]:
+        if len(out) >= count:
+            break
+        if not llm.TR_CHARS.search(c.get("title") or ""):
+            continue
+        url, good, _ = check_link(c["url"], c.get("published"), since, MIN_ARTICLE_CHARS_RELAXED)
+        if not good:
+            continue
+        summary = trim_sentences(re.sub(r"\s+", " ", good["text"]), NEWS_ITEM_MAX)
+        if len(summary) < MIN_SUMMARY_CHARS:
+            continue
+        out.append({"title": c["title"], "summary": summary, "source": c["source"], "url": url,
+                    "published": good["date"], "original_title": c["title"], "also_reported_by": []})
+    items, rest = diversify(out, count, since)
+    return {"items": items, "reserve": rest} if items else None
+
+
+# Sayfa ölçümüyle belirlendi: 10 haber × bu uzunluk, iki sayfada en az 8,5 puntoyla sığar
+NEWS_ITEM_MAX = 340
+CHART_TEXT_MAX = 650
+EVENT_TEXT_MAX = 420
+WCI_PARAGRAPH_MAX = 560
+SENTENCE_END = re.compile(r"(?<=[a-zçğıöşü0-9)\"”’%][.!?…])\s+(?=[\"“‘A-ZÇĞİÖŞÜ0-9])")
+
+
+def trim_sentences(text, limit):
+    """Metni cümle sınırından kısaltır; hiçbir zaman cümle ortasından kesmez."""
+    text = (text or "").strip()
+    if len(text) <= limit:
+        return text
+    out = ""
+    for sentence in SENTENCE_END.split(text):
+        if out and len(out) + 1 + len(sentence) > limit:
+            break
+        out = f"{out} {sentence}".strip()
+    return out
+
+
+def over_budget(sec):
+    return [x for x in (sec or {}).get("items", []) + (sec or {}).get("reserve", [])
+            if len(x.get("summary") or "") > NEWS_ITEM_MAX]
+
+
+def enforce_budget(sec):
+    """Uzun özetleri seçimi değiştirmeden kısaltır: önce LLM, olmazsa son cümleler atılır."""
+    long_items = over_budget(sec)
+    if long_items and llm.provider():
+        refs = {str(i): x for i, x in enumerate(long_items)}
+        blocks = "\n\n".join(f"### {k}\n{x['summary']}" for k, x in refs.items())
+        try:
+            out = llm.ask_json(prompts.SHORTEN_SYSTEM.format(limit=NEWS_ITEM_MAX),
+                               prompts.SHORTEN_USER.format(items=blocks),
+                               check=lambda o: llm.require_turkish([x.get("summary") for x in o.get("items", [])]))
+            for x in out.get("items", []):
+                it = refs.get(str(x.get("key")))
+                if it and MIN_SUMMARY_CHARS <= len(x.get("summary") or "") < len(it["summary"]):
+                    it["summary"] = x["summary"]
+        except Exception as ex:
+            log(f"  ! özet kısaltma LLM'le yapılamadı: {ex}")
+    for x in over_budget(sec):
+        x["summary"] = trim_sentences(x["summary"], NEWS_ITEM_MAX)
+
+
+def drop_shared_news(tr, intl):
+    """Aynı haber iki bölümde olmasın: yurt dışından çıkarılır, yedekten tamamlanır."""
+    if not tr or not intl:
+        return
+    urls = {x.get("url") for x in tr.get("items", [])}
+    keep = [x for x in intl.get("items", []) if x.get("url") not in urls]
+    missing = len(intl.get("items", [])) - len(keep)
+    if missing:
+        spare = [x for x in intl.get("reserve", []) if x.get("url") not in urls]
+        intl["items"] = keep + spare[:missing]
+        intl["reserve"] = spare[missing:]
 
 
 def site(url):
@@ -139,9 +261,10 @@ def diversify(news, count, since):
 
 
 MIN_ARTICLE_CHARS = 1200
+MIN_ARTICLE_CHARS_RELAXED = 600
 
 
-def check_link(url, published, since):
+def check_link(url, published, since, min_chars=MIN_ARTICLE_CHARS):
     """Linkin açılabilir, yeterince içerikli ve kapsanan döneme ait olduğunu doğrular.
     Dönüş: (url, {"text", "date"} | None, ret nedeni)"""
     url = resolve_gnews(url)
@@ -153,7 +276,7 @@ def check_link(url, published, since):
     if m and f"{m.group(1)}-{m.group(2)}" < since[:7]:
         return url, None, "eski tarih (URL)"
     info = article_info(url)
-    if len(info["text"]) < MIN_ARTICLE_CHARS:
+    if len(info["text"]) < min_chars:
         return url, None, f"içerik yetersiz ({len(info['text'])} karakter)"
     dates = [d[:10] for d in (published, info["date"]) if d]
     if any(d < since for d in dates):
@@ -163,7 +286,7 @@ def check_link(url, published, since):
     return url, {"text": info["text"], "date": max(dates) if dates else None}, None
 
 
-def verify_news(items, since):
+def verify_news(items, since, min_chars=MIN_ARTICLE_CHARS):
     """Her haberin linkini açıp kontrol eder; geçmeyen link yerine aynı haberin diğer
     kaynaklarını dener. Hiçbiri geçmezse haber elenir."""
     def one(it):
@@ -171,7 +294,7 @@ def verify_news(items, since):
             (a["url"], a.get("published"), a["source"]) for a in it.get("also_reported_by", [])]
         reasons = []
         for url, pub, src in tries:
-            url, good, why = check_link(url, pub, since)
+            url, good, why = check_link(url, pub, since, min_chars)
             if good:
                 it.update(url=url, source=src, published=good["date"], fulltext=good["text"][:4000])
                 it["also_reported_by"] = [a for a in it.get("also_reported_by", []) if a["url"] != url]
@@ -215,12 +338,41 @@ def build_wci(raw):
                        check=lambda o: llm.require_turkish(o.get("paragraphs") or [], 1.0))
     return {
         **raw,
-        "paragraphs": out.get("paragraphs", []),
+        "paragraphs": [trim_sentences(p, WCI_PARAGRAPH_MAX) for p in out.get("paragraphs", [])],
         "routes": out.get("routes", []),
         "outlook": out.get("outlook"),
         "composite_usd_40ft": raw["composite_usd_40ft"] or out.get("composite_usd_40ft"),
         "change_pct": raw["change_pct"] if raw["change_pct"] is not None else out.get("change_pct"),
     }
+
+
+WCI_MAX_JUMP = 1.4
+
+
+def wci_sane(raw, hist):
+    """Yanlış okunmuş rakam (ör. tek hat fiyatı) bültene ve geçmişe girmesin: son değerden ±%40 sapma."""
+    v = (raw or {}).get("composite_usd_40ft")
+    before = [x for x in hist if x["date"] < (raw.get("assessment_date") or "9999")]
+    if not v or not before:
+        return True
+    last = before[-1]["composite"]
+    return last / WCI_MAX_JUMP <= v <= last * WCI_MAX_JUMP
+
+
+def wci_template(raw):
+    """LLM yokken rakamlardan kurulan özet. Rakam da yoksa None."""
+    v, chg, day = raw.get("composite_usd_40ft"), raw.get("change_pct"), raw.get("assessment_date")
+    if not v or not day:
+        return None
+    when = tr_date(date.fromisoformat(day))
+    money = f"{v:,.0f}".replace(",", ".")
+    if chg:
+        move = f"önceki haftaya göre %{tr_num(abs(chg), 1)} {'artarak' if chg > 0 else 'azalarak'}"
+    else:
+        move = "önceki haftaya göre yatay seyrederek"
+    return {**raw, "paragraphs": [f"{when} itibarıyla Drewry Dünya Konteyner Endeksi (WCI), {move} "
+                                  f"40'lık konteyner başına {money} dolar oldu."],
+            "routes": raw.get("routes") or []}
 
 
 def tr_num(v, d=2):
@@ -269,6 +421,12 @@ def trade_from_official(t):
     }
 
 
+def trade_sane(t):
+    """Aylık rakamlar makul aralıkta mı (milyar $). Eksik rakam burada değil, bölüm kontrolünde yakalanır."""
+    ex, im = (t or {}).get("exports_billion_usd"), (t or {}).get("imports_billion_usd")
+    return (ex is None or 5 <= ex <= 60) and (im is None or 5 <= im <= 80)
+
+
 def build_trade(candidates, today):
     """Resmî sayfa bulunamazsa yedek: haberlerden LLM ile çıkarım."""
     # İlk adayların tam metnini ekle (ithalat rakamı genelde sadece metinde geçer)
@@ -284,6 +442,8 @@ def build_trade(candidates, today):
         max_tokens=8000,
         check=lambda o: llm.require_turkish([o.get("summary")]),
     )
+    if not trade_sane(out):
+        raise ValueError(f"dış ticaret rakamı makul değil: {out.get('exports_billion_usd')}/{out.get('imports_billion_usd')}")
     srcs = [pick(candidates, i) for i in out.pop("source_ids", []) or []]
     out["sources"] = [{"title": s["title"], "source": s["source"], "url": s["url"]} for s in srcs if s]
     out["official_url"] = "https://ticaret.gov.tr/istatistikler/dis-ticaret-istatistikleri"
@@ -314,6 +474,8 @@ def build_charts(cands, today):
                 "source": c["source"], "published": c.get("published")}
 
     items = [card(pick(cands, x.get("id")), x) for x in out["items"] if pick(cands, x.get("id"))][:2]
+    for c in items:
+        c["summary"] = trim_sentences(c["summary"], CHART_TEXT_MAX)
     used = {i["url"] for i in items}
     reserve = [card(c) for c in (pick(cands, i) for i in out.get("reserve_ids") or []) if c and c["url"] not in used]
     for c in items + reserve:  # akıştaki görsel çoğu zaman yatay paylaşım görseli; dikey infografiği tercih et
@@ -393,46 +555,62 @@ def build_event(candidates, today):
                        max_tokens=12000, check=check)
 
     t = today.isoformat()
-    limit = (today + timedelta(days=75)).isoformat()
-    ok, seen = [], set()
-    for x in out["events"]:
-        c = pick(candidates, x.get("id"))
-        if not c or not x.get("is_event"):
-            continue
-        start, end = x.get("start_date") or None, x.get("end_date") or None
-        last = end or start
-        why = (None if last and last >= t else "tarih yok/geçmiş") or \
-              (None if not start or start >= t else "başlamış/devam eden program") or \
-              (None if not (start and end) or (date.fromisoformat(end) - date.fromisoformat(start)).days <= 5
-               else "çok günlü seri/program") or \
-              (None if (start or last) <= limit else "çok ileri tarih") or \
-              (None if x.get("online") is True else "çevrim içi değil") or \
-              (None if x.get("free") is True or (x.get("free") is None and kamu(c["url"])) else "ücretsiz değil") or \
-              (None if (x.get("relevance") or 0) >= 5 else "konu dışı")
-        if why:
-            log(f"    – etkinlik elendi: {(x.get('title') or c['title'])[:60]} ({why})")
-            continue
-        key = re.sub(r"\W+", "", (x.get("title") or "").lower())[:40]
-        if key in seen:
-            continue
-        seen.add(key)
-        fmt = lambda d: date.fromisoformat(d).strftime("%d.%m.%Y")
-        ok.append({
-            "title": x.get("title") or c["title"], "organizer": x.get("organizer"),
-            "description": x.get("description", ""),
-            "date": fmt(start) + (f"-{fmt(end)}" if end and end != start else "") if start else fmt(end),
-            "start_date": start, "end_date": end,
-            "time": x.get("time"), "location": "Online", "fee": "Ücretsiz",
-            "register_url": x.get("register_url") or c.get("register_hint") or c["url"],
-            "source_url": c["url"], "source": c["source"],
-            "relevance": x.get("relevance"),
-        })
-    # Önce önümüzdeki 3 hafta içindekiler, sonra en ilgili, sonra en yakın tarihli
-    soon = (today + timedelta(days=21)).isoformat()
-    ok.sort(key=lambda e: ((e["start_date"] or e["end_date"]) > soon, -(e["relevance"] or 0),
-                           e["start_date"] or e["end_date"]))
-    ok = usable_event_links(ok)
+
+    def eligible(limit):
+        ok, seen = [], set()
+        for x in out["events"]:
+            c = pick(candidates, x.get("id"))
+            if not c or not x.get("is_event"):
+                continue
+            start, end = x.get("start_date") or None, x.get("end_date") or None
+            last = end or start
+            why = (None if last and last >= t else "tarih yok/geçmiş") or \
+                  (None if not start or start >= t else "başlamış/devam eden program") or \
+                  (None if not (start and end) or (date.fromisoformat(end) - date.fromisoformat(start)).days <= 5
+                   else "çok günlü seri/program") or \
+                  (None if (start or last) <= limit else "çok ileri tarih") or \
+                  (None if x.get("online") is True else "çevrim içi değil") or \
+                  (None if x.get("free") is True or (x.get("free") is None and kamu(c["url"])) else "ücretsiz değil") or \
+                  (None if (x.get("relevance") or 0) >= 5 else "konu dışı")
+            if why:
+                log(f"    – etkinlik elendi: {(x.get('title') or c['title'])[:60]} ({why})")
+                continue
+            key = re.sub(r"\W+", "", (x.get("title") or "").lower())[:40]
+            if key in seen:
+                continue
+            seen.add(key)
+            fmt = lambda d: date.fromisoformat(d).strftime("%d.%m.%Y")
+            ok.append({
+                "title": x.get("title") or c["title"], "organizer": x.get("organizer"),
+                "description": trim_sentences(x.get("description", ""), EVENT_TEXT_MAX),
+                "date": fmt(start) + (f"-{fmt(end)}" if end and end != start else "") if start else fmt(end),
+                "start_date": start, "end_date": end,
+                "time": x.get("time"), "location": "Online", "fee": "Ücretsiz",
+                "register_url": x.get("register_url") or c.get("register_hint") or c["url"],
+                "source_url": c["url"], "source": c["source"],
+                "relevance": x.get("relevance"),
+            })
+        # Önce önümüzdeki 3 hafta içindekiler, sonra en ilgili, sonra en yakın tarihli
+        soon = (today + timedelta(days=21)).isoformat()
+        ok.sort(key=lambda e: ((e["start_date"] or e["end_date"]) > soon, -(e["relevance"] or 0),
+                               e["start_date"] or e["end_date"]))
+        return usable_event_links(ok)
+
+    # Yakın tarihte uygun etkinlik yoksa daha ileri tarihliler de kabul edilir
+    ok = eligible((today + timedelta(days=75)).isoformat()) or eligible((today + timedelta(days=120)).isoformat())
     return {"selected": ok[0] if ok else None, "alternatives": ok[1:5]}
+
+
+EVENT_LINKS = ["https://dtybs.ticaret.gov.tr/e-sohbetler/takvim/", "https://tagm.ticaret.gov.tr/haberler"]
+EVENT_FALLBACK_TEXT = ("Bu hafta için ileri tarihli, çevrim içi ve ücretsiz bir etkinlik duyurusu bulunmuyor. "
+                       "T.C. Ticaret Bakanlığı'nın güncel ücretsiz eğitim ve e-sohbet takvimini aşağıdaki "
+                       "bağlantıdan takip edebilirsiniz.")
+
+
+def event_fallback():
+    """Etkinlik yokken PDF'te gösterilecek yönlendirme; link okuyucu gibi denenir."""
+    url = next((u for u in EVENT_LINKS if reader_check(u)[0]), None)
+    return {"text": EVENT_FALLBACK_TEXT, "url": url} if url else {"text": EVENT_FALLBACK_TEXT.split(" T.C.")[0]}
 
 
 def usable_event_links(events):
@@ -468,18 +646,26 @@ def pick_release(events):
                 "Aylık" in ind, e["time"] or "")
     tr = [e for e in events if e["country"] == "Türkiye"]
     trade = [e for e in events if FOREIGN_TRADE.search(e["indicator"] or "")]
-    pool = tr or trade or [e for e in events if TRADE_WORDS.search(e["indicator"] or "") or e["priority"] >= 3]
+    macro = [e for e in events if TRADE_WORDS.search(e["indicator"] or "") or e["priority"] >= 3]
+    pool = tr or trade or macro or events
     return min(pool, key=rank) if pool else None
 
 
-def build_calendar(days, events):
+NO_RELEASE = "Önemli bir veri açıklaması beklenmiyor."
+
+
+def build_calendar(days, events, failed=()):
+    """Pazartesi-cumartesi her gün yazılır. Veri alınamayan gün işaretlenir (sabah yeniden denenir)."""
     out = {"days": []}
     for day in days:
-        e = pick_release([x for x in events if x["date"] == day])
+        e = pick_release([x for x in events if x["date"] == day and x.get("country") and x.get("indicator")])
         if e:
             ind = e["indicator"].replace("İstanbul Sanayi Odası (İSO)", "İSO")
             out["days"].append({"date": day, "text": f"{e['country']} {ind} açıklanacak.",
                                 "country": e["country"], "time": e["time"]})
+        else:
+            out["days"].append({"date": day, "text": NO_RELEASE, "no_data": True,
+                                **({"unavailable": True} if day in failed else {})})
     add_holidays(out, days)
     for d in out["days"]:
         d["weekday"] = WEEKDAYS[date.fromisoformat(d["date"]).weekday()]
@@ -501,7 +687,7 @@ def add_holidays(out, days):
             out.setdefault("days", []).append(d)
         d["text"] = name
         d["holiday"] = name
-        for k in ("country", "time"):  # yerine geçen veri açıklamasından kalmasın
+        for k in ("country", "time", "no_data", "unavailable"):  # yerine geçen veri açıklamasından kalmasın
             d.pop(k, None)
     out["days"] = sorted(out.get("days", []), key=lambda d: d.get("date") or "")
 
@@ -530,8 +716,9 @@ def complete_sections(old, today):
         # Cuma sabahı link yeniden denenir: gece açılan sayfa sabah açılmıyorsa etkinlik yeniden seçilir
         "event": lambda x: bool(x.get("selected")) and not LISTING_URL.search(x["selected"].get("register_url") or "")
                            and reader_check(x["selected"].get("register_url") or "")[0],
-        "next_week": lambda x: len(x.get("days") or []) >= 5 and all(
-            d.get("holiday") or (d.get("country") and d.get("text", "").startswith(d["country"])) for d in x["days"]),
+        "next_week": lambda x: len(x.get("days") or []) >= 6 and all(
+            d.get("holiday") or (d.get("no_data") and not d.get("unavailable"))
+            or (d.get("country") and d.get("text", "").startswith(d["country"])) for d in x["days"]),
         "charts": lambda x: len(x.get("items") or []) >= 2,
         "wci": lambda x: bool(x.get("paragraphs")) and (x.get("assessment_date") or "") >= (
             today - timedelta(days=2)).isoformat(),
@@ -543,18 +730,89 @@ def complete_sections(old, today):
     return ok
 
 
-def run(today: date, use_llm=True, fill_missing=False):
+def has_content(key, x):
+    """Bölümde gösterilecek bir şey var mı (geç çalıştırma yalnızca tamamen boşları doldurur)."""
+    if not x:
+        return False
+    return {"event": bool(x.get("selected")), "wci": bool(x.get("paragraphs")),
+            "next_week": bool(x.get("days")), "trade_data": x.get("exports_billion_usd") is not None,
+            }.get(key, bool(x.get("items")))
+
+
+LATE_HOUR = 11
+
+
+def is_late(now, today):
+    """Bülten cuma 11:30'da güncel kabul edilir; bundan sonra zamanlanmış çalıştırma içeriğe dokunmaz."""
+    return now >= datetime.combine(today, datetime.min.time(), TR_TZ) + timedelta(hours=LATE_HOUR)
+
+
+def scheduled_date(now):
+    """Zamanlanmış çalıştırma cumaya sarkarsa bile o haftanın cumasına aittir."""
+    d = now.date()
+    return d - timedelta(days=(d.weekday() - 4) % 7)
+
+
+def previous_bulletin(today):
+    """Bu tarihten önceki en yeni bülten (kaynak düşünce son geçerli veriyi almak için)."""
+    folder = config.DATA_DIR / "bulletins"
+    names = sorted(p.stem for p in folder.glob("*.json") if p.stem < today.isoformat()) if folder.exists() else []
+    if not names:
+        return {}
+    try:
+        return json.loads((folder / f"{names[-1]}.json").read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def carry_forward(b, prev, today, notices):
+    """Kaynağı düşen bölüm için son geçerli veri kullanılır; PDF'te boş kutu kalmaz."""
+    if not b.get("trade_data") or not has_content("trade_data", b["trade_data"]):
+        if has_content("trade_data", prev.get("trade_data")):
+            b["trade_data"] = prev["trade_data"]
+            notices["trade_data"] = f"Dış ticaret verisi alınamadı; son açıklanan veri ({prev['trade_data'].get('month')}) kullanıldı."
+    if not b.get("annual_exports_card") and prev.get("annual_exports_card"):
+        b["annual_exports_card"] = prev["annual_exports_card"]
+    if not (b.get("wci") or {}).get("paragraphs"):
+        made = wci_template(b["wci"]) if b.get("wci") else None
+        if made:
+            b["wci"] = made
+            notices["wci"] = "WCI özeti otomatik kalıpla yazıldı; metni gözden geçirin."
+        elif (prev.get("wci") or {}).get("paragraphs"):
+            b["wci"] = prev["wci"]
+            notices["wci"] = f"WCI bu hafta alınamadı; son geçerli değerlendirme ({prev['wci'].get('assessment_date')}) kullanıldı."
+    ev = b.get("event") or {"selected": None, "alternatives": []}
+    if not ev.get("selected"):
+        old = (prev.get("event") or {}).get("selected") or {}
+        end = old.get("end_date") or old.get("start_date") or ""
+        if end >= today.isoformat() and reader_check(old.get("register_url") or "")[0]:
+            ev["selected"] = old
+            notices["event"] = "Yeni etkinlik bulunamadı; geçen haftanın hâlâ ileri tarihli etkinliği kullanıldı."
+        else:
+            ev["fallback"] = event_fallback()
+            notices["event"] = "Uygun etkinlik bulunamadı; PDF'te eğitim takvimi yönlendirmesi gösteriliyor."
+    b["event"] = ev
+
+
+def run(today: date, use_llm=True, fill_missing=False, late=False):
     since_dt = datetime.combine(today - timedelta(days=config.LOOKBACK_DAYS), datetime.min.time(), TR_TZ)
     warnings = []
     path = config.DATA_DIR / "bulletins" / f"{today.isoformat()}.json"
     old = json.loads(path.read_text()) if fill_missing and path.exists() else None
-    done = complete_sections(old, today) if old and old.get("llm") else set()
+    if late and old:  # müşteriye gitmiş olabilir: yalnızca tamamen boş bölümler doldurulur
+        done = {k for k in list(SECTIONS) + ["wci"] if has_content(k, old.get(k))}
+    else:
+        done = complete_sections(old, today) if old and old.get("llm") else set()
+    shorten = bool(old) and not late and any(over_budget(old.get(k)) for k in ("tr_news", "intl_news"))
     if done:
         missing = [k for k in list(SECTIONS) + ["wci"] if k not in done]
-        if not missing:
+        if not missing and not shorten:
             log(f"{today} taslağı eksiksiz; yeniden üretilmiyor.")
             return None
-        log(f"Mevcut taslakta eksik bölümler yeniden üretilecek: {', '.join(missing)}")
+        log(f"Mevcut taslakta eksik bölümler yeniden üretilecek: {', '.join(missing) or 'yok (yalnızca kısaltma)'}")
+
+    prev = previous_bulletin(today)
+    notices = {k: v for k, v in ((old or {}).get("notices") or {}).items() if k in done}
 
     bulletin = {
         "date": today.isoformat(),
@@ -574,41 +832,60 @@ def run(today: date, use_llm=True, fill_missing=False):
             warnings.append(f"{name}: {ex}")
             return None
 
+    # Her kaynak ayrı korunur: biri düşerse diğerleriyle devam edilir
+    def gather(name, fn):
+        return step(name, fn) or []
+
     log("Haber adayları toplanıyor...")
-    rss = fetch_rss(since_dt)
-    official = fetch_ticaret(since_dt)
+    rss = gather("RSS kaynakları", lambda: fetch_rss(since_dt))
+    official = gather("Bakanlık haberleri", lambda: fetch_ticaret(since_dt))
     rel_tr, rel_en = re.compile(config.RELEVANCE_TR, re.I), re.compile(config.RELEVANCE_EN, re.I)
     rss_tr = [x for x in rss if x["region"] == "tr" and rel_tr.search(x["title"] + " " + x["snippet"])]
     rss_intl = [x for x in rss if x["region"] == "intl" and rel_en.search(x["title"] + " " + x["snippet"])]
     tr_c = dedupe(
         official
-        + fetch_tavily(config.TAVILY_NEWS_TR, "tr")
-        + interleave(rss_tr, fetch_gnews(config.GNEWS_TR, "tr", since_dt, "tr"))
+        + gather("Tavily (TR)", lambda: fetch_tavily(config.TAVILY_NEWS_TR, "tr"))
+        + interleave(rss_tr, gather("Google News (TR)", lambda: fetch_gnews(config.GNEWS_TR, "tr", since_dt, "tr")))
     )[:350]
     intl_c = dedupe(
-        fetch_tavily(config.TAVILY_NEWS_INTL, "intl")
-        + interleave(rss_intl, fetch_gnews(config.GNEWS_INTL, "intl", since_dt, "en"))
+        gather("Tavily (yurt dışı)", lambda: fetch_tavily(config.TAVILY_NEWS_INTL, "intl"))
+        + interleave(rss_intl, gather("Google News (yurt dışı)", lambda: fetch_gnews(config.GNEWS_INTL, "intl", since_dt, "en")))
     )[:350]
+
+    def wider_news(queries, region, lang, have):
+        """Son 7 günde haber yetmezse 14 günlük dönemin adayları."""
+        def go():
+            since_wide = since_dt - timedelta(days=config.LOOKBACK_DAYS)
+            pool = dedupe(have + (step("Google News (geniş dönem)",
+                                       lambda: fetch_gnews(queries, region, since_wide, lang, "14d")) or []))
+            return pool[:350], (today - timedelta(days=config.LOOKBACK_DAYS * 2)).isoformat()
+        return go
 
     log("Etkinlik adayları toplanıyor...")
     next_m = (today.replace(day=1) + timedelta(days=32)).replace(day=1)
     months = [f"{MONTHS[today.month - 1]} {today.year}", f"{MONTHS[next_m.month - 1]} {next_m.year}"]
     event_c = dedupe(
-        fetch_event_listings()
-        + fetch_tavily([q.format(ay=m) for q in config.TAVILY_EVENTS for m in months], "tr", topic="general")
-        + fetch_gnews([q.format(ay=months[-1]) for q in config.GNEWS_EVENTS], "tr",
-                      since_dt - timedelta(days=21), "tr", "30d")
+        gather("Duyuru listeleri", fetch_event_listings)
+        + gather("Tavily (duyuru)", lambda: fetch_tavily([q.format(ay=m) for q in config.TAVILY_EVENTS for m in months], "tr", topic="general"))
+        + gather("Google News (duyuru)", lambda: fetch_gnews([q.format(ay=months[-1]) for q in config.GNEWS_EVENTS], "tr",
+                                                             since_dt - timedelta(days=21), "tr", "30d"))
     )
 
     log("Dış ticaret verisi (Ticaret Bakanlığı) çekiliyor...")
     trade_off = step("Ticaret Bakanlığı verisi", lambda: fetch_trade_official(today))
+    if trade_off:
+        mo = trade_off.get("monthly") or {}
+        if not trade_sane({"exports_billion_usd": (mo.get("exports") or {}).get("billion_usd"),
+                           "imports_billion_usd": (mo.get("imports") or {}).get("billion_usd")}):
+            log("  ! Bakanlık rakamı makul aralıkta değil; yok sayılıyor")
+            trade_off = None
     trade_c = []
     if not trade_off:
         prev_month = MONTHS[(today.replace(day=1) - timedelta(days=1)).month - 1]
         trade_c = dedupe(
-            fetch_tavily([q.format(ay=prev_month) for q in config.TAVILY_TRADE_DATA], "tr")
-            + fetch_gnews([q.format(ay=prev_month) for q in config.GNEWS_TRADE_DATA], "tr",
-                          since_dt - timedelta(days=30), "tr", "30d")
+            gather("Tavily (dış ticaret)", lambda: fetch_tavily([q.format(ay=prev_month) for q in config.TAVILY_TRADE_DATA], "tr"))
+            + gather("Google News (dış ticaret)", lambda: fetch_gnews([q.format(ay=prev_month) for q in config.GNEWS_TRADE_DATA], "tr",
+                                                                      since_dt - timedelta(days=30), "tr", "30d"))
         )
     annual = config.ANNUAL_EXPORTS_OVERRIDE.get(today.year - 1)
     annual_year = today.year - 1
@@ -619,13 +896,25 @@ def run(today: date, use_llm=True, fill_missing=False):
                                            "value": f"{annual:.3f} Milyar $"}
 
     log("Grafik haberleri çekiliyor...")
-    charts_c = step("Grafik haberleri", lambda: fetch_charts(since_dt)) or []
+    # Geçen hafta kullanılan grafikler tekrar edilmez; aday azsa dönem 30 güne genişler
+    used_charts = {c.get("url") for c in (prev.get("charts") or {}).get("items", [])}
+    fresh_charts = lambda cs: [c for c in cs if c["url"] not in used_charts]
+    charts_c = fresh_charts(step("Grafik haberleri", lambda: fetch_charts(since_dt)) or [])
+    if len(charts_c) < 2:
+        log("  ! Grafik adayı az; dönem 30 güne genişletiliyor")
+        charts_c = fresh_charts(step("Grafik haberleri (geniş dönem)",
+                                     lambda: fetch_charts(since_dt - timedelta(days=23), pages=5)) or [])
     log(f"Adaylar: TR {len(tr_c)}, yurt dışı {len(intl_c)}, etkinlik {len(event_c)}, grafik {len(charts_c)}")
 
     log("Drewry WCI çekiliyor...")
     wci_raw = step("Drewry WCI", fetch_drewry)
+    if wci_raw and not wci_sane(wci_raw, load_wci_history()):
+        log(f"  ! WCI rakamı şüpheli: {wci_raw.get('composite_usd_40ft')}; yok sayılıyor")
+        notices["wci_suspect"] = f"Drewry sayfasından okunan WCI rakamı ({wci_raw.get('composite_usd_40ft')}) son değerden çok uzak olduğu için kullanılmadı."
+        wci_raw = None
     log("Bigpara gelecek hafta takvimi çekiliyor...")
-    cal = step("Bigpara takvim", lambda: fetch_bigpara(today)) or ([], [])
+    week_days = [d.isoformat() for d in next_week_days(today)]
+    cal = step("Bigpara takvim", lambda: fetch_bigpara(today)) or (week_days, [], week_days)
 
     bulletin["candidates"] = {"tr": tr_c, "intl": intl_c, "events": event_c, "trade": trade_c,
                               "charts": charts_c}
@@ -639,9 +928,11 @@ def run(today: date, use_llm=True, fill_missing=False):
         since_s = (today - timedelta(days=config.LOOKBACK_DAYS)).isoformat()
         jobs = {
             "tr_news": ("Türkiye haberleri",
-                        lambda: build_news("Türkiye'deki Gelişmeler", tr_c, 10, 10, today, since_s)),
+                        lambda: build_news("Türkiye'deki Gelişmeler", tr_c, 10, 10, today, since_s,
+                                           wider_news(config.GNEWS_TR, "tr", "tr", tr_c))),
             "intl_news": ("Yurt dışı haberleri",
-                          lambda: build_news("Yurt Dışındaki Gelişmeler", intl_c, 10, 10, today, since_s)),
+                          lambda: build_news("Yurt Dışındaki Gelişmeler", intl_c, 10, 10, today, since_s,
+                                             wider_news(config.GNEWS_INTL, "intl", "en", intl_c))),
             "event": ("Etkinlik", lambda: build_event(event_c, today)),
             "charts": ("Grafik haberleri", lambda: build_charts(charts_c, today)),
         }
@@ -649,8 +940,7 @@ def run(today: date, use_llm=True, fill_missing=False):
             jobs["trade_data"] = ("Dış ticaret verisi", lambda: build_trade(trade_c, today))
         if wci_raw:
             jobs["wci"] = ("WCI özeti", lambda: build_wci(wci_raw))
-        if cal[1]:
-            jobs["next_week"] = ("Gelecek hafta", lambda: build_calendar(*cal))
+        jobs["next_week"] = ("Gelecek hafta", lambda: build_calendar(*cal))
         for k in done & set(jobs):
             bulletin[k] = old[k]
             del jobs[k]
@@ -668,12 +958,35 @@ def run(today: date, use_llm=True, fill_missing=False):
             with ThreadPoolExecutor(max_workers=2) as ex:
                 for k, sec in secs.items():
                     ex.submit(step, f"Özet doğrulama ({k})", lambda k=k, sec=sec: refine_news({k: sec}))
+        if not late:
+            for k in ("tr_news", "intl_news"):
+                if over_budget(bulletin.get(k)):
+                    log(f"{k}: uzun özetler kısaltılıyor...")
+                    step(f"Özet kısaltma ({k})", lambda k=k: enforce_budget(bulletin[k]))
     else:
         warnings.append("LLM anahtarı tanımlı değil: yalnızca ham adaylar üretildi.")
 
     if llm.used_models:
         bulletin["llm"] = ", ".join(sorted(llm.used_models | set(filter(None, [(old or {}).get("llm")]))))
     keep_previous_sections(bulletin, warnings)
+    for key, cands in (("tr_news", tr_c), ("intl_news", intl_c)):
+        if not (bulletin.get(key) or {}).get("items"):
+            made = step("Otomatik özet", lambda c=cands: fallback_news(c, today_since(today), 10))
+            if made:
+                bulletin[key] = made
+                notices[key] = f"{SECTIONS[key]} modelsiz, kaynak metinden otomatik özetlendi; metinleri gözden geçirin."
+    if not late and bulletin.get("tr_news") and bulletin.get("intl_news"):
+        drop_shared_news(bulletin["tr_news"], bulletin["intl_news"])
+    carry_forward(bulletin, prev, today, notices)
+    for key in ("tr_news", "intl_news"):
+        note = (bulletin.get(key) or {}).pop("note", None)
+        if note:
+            notices[key] = note
+    if not late:
+        for key in ("tr_news", "intl_news"):  # LLM kısaltması geçmediyse cümle sınırından
+            for x in over_budget(bulletin.get(key)):
+                x["summary"] = trim_sentences(x["summary"], NEWS_ITEM_MAX)
+    bulletin["notices"] = notices
     for sec in ("tr_news", "intl_news"):
         for it in (bulletin.get(sec) or {}).get("items", []) + (bulletin.get(sec) or {}).get("reserve", []):
             it.pop("fulltext", None)
@@ -684,6 +997,18 @@ def run(today: date, use_llm=True, fill_missing=False):
     bulletin["warnings"] = warnings
     save(bulletin)
     return bulletin
+
+
+def today_since(today):
+    return (today - timedelta(days=config.LOOKBACK_DAYS)).isoformat()
+
+
+def load_wci_history():
+    path = config.DATA_DIR / "wci_history.json"
+    try:
+        return json.loads(path.read_text()) if path.exists() else []
+    except (OSError, ValueError):
+        return []
 
 
 def keep_previous_sections(b, warnings):
@@ -736,9 +1061,14 @@ def main():
     ap.add_argument("--no-llm", action="store_true", help="Sadece veri topla, LLM çağırma")
     ap.add_argument("--fill-missing", action="store_true",
                     help="Bu tarih için taslak varsa yalnızca eksik/başarısız bölümleri yeniden üret")
+    ap.add_argument("--scheduled", action="store_true",
+                    help="Zamanlanmış çalıştırma: tarih o haftanın cuması, geç kalırsa mevcut içerik değişmez")
     a = ap.parse_args()
     today = date.fromisoformat(a.date) if a.date else datetime.now(TR_TZ).date()
-    b = run(today, use_llm=not a.no_llm, fill_missing=a.fill_missing)
+    now = datetime.now(TR_TZ)
+    if a.scheduled and not a.date:
+        today = scheduled_date(now)
+    b = run(today, use_llm=not a.no_llm, fill_missing=a.fill_missing, late=a.scheduled and is_late(now, today))
     if b and b["warnings"]:
         log("Uyarılar:\n  - " + "\n  - ".join(b["warnings"]))
 

@@ -218,6 +218,7 @@ function checklist() {
   else if (!e.time) items.push({ id: "eventdate", text: "Etkinliğin saatini kayıt sayfasından ekleyin.", url: e.register_url || e.source_url, cta: "Etkinlik sayfası" });
   items.push({ id: "podcast", text: "Bu haftanın podcast görselini ve açıklamasını Podcast bölümünde güncelleyin (değiştirmezseniz son girilenler kullanılır)." });
   if (doc.next_week?.days?.some((d) => d.unavailable)) items.push({ id: "calendar", text: "Takvim verisi alınamayan gün var; Bigpara'dan bakıp ilgili satıra yazın.", url: "https://bigpara.hurriyet.com.tr/haberler/gunluk-piyasa-takvimi/gelecek-hafta/", cta: "Bigpara" });
+  for (const [k, text] of Object.entries(doc.notices || {})) items.push({ id: `n:${k}`, text });
   for (const w of doc.warnings || []) {
     if (/korundu/.test(w)) items.push({ id: `w:${w}`, text: w.replace("bu çalıştırmada üretilemedi; önceki sürüm korundu.", "bu sabah güncellenemedi; bir önceki taslağın metni gösteriliyor.") });
   }

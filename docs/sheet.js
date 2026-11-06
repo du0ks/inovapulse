@@ -369,7 +369,7 @@ async function waitAssets(root) {
 
 function newProblems() {
   const p = [];
-  p.info = [];
+  p.info = Object.values(doc.notices || {});
   if (isStale()) p.push(`Bu, ${doc.date_tr} tarihli bülten; bu haftanın bülteni henüz hazır değil.`);
   return p;
 }
