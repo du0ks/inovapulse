@@ -120,6 +120,30 @@ const dir = (n) => n > 0 ? "up" : n < 0 ? "down" : "";
 
 const DAYS = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
 const MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+const NO_RELEASE = "Önemli bir veri açıklaması beklenmiyor.";
+
+// Gelecek hafta her zaman pazartesi-cumartesi: eksik gün boş satır olarak eklenir, böylece yazılabilir
+function normalizeWeek(d) {
+  const mon = new Date(d.date + "T12:00:00");
+  mon.setDate(mon.getDate() + ((8 - mon.getDay()) % 7 || 7));
+  const old = d.next_week?.days || [];
+  const days = [...Array(6)].map((_, i) => {
+    const x = new Date(mon); x.setDate(mon.getDate() + i);
+    const iso = `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
+    return old.find((y) => y.date === iso) || { date: iso, text: "", weekday: DAYS[x.getDay()],
+      date_tr: `${x.getDate()} ${MONTHS[x.getMonth()]} ${x.getFullYear()}` };
+  });
+  d.next_week = { ...(d.next_week || {}), days };
+}
+
+// Son bülten, içinde bulunulan haftanın cumasından eskiyse bu haftanınki üretilememiştir
+function isStale() {
+  if (!isLatest || !doc?.date) return false;
+  const now = new Date();
+  const fri = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 2) % 7));
+  return new Date(doc.date + "T23:59:59") < fri;
+}
+
 function shortDate(iso) {
   if (!iso) return "";
   const d = new Date(String(iso).slice(0, 10) + "T12:00:00");
@@ -167,7 +191,7 @@ const T = {
   week: () => {
     const nw = doc.next_week || {};
     return ["Gelecek Haftanın Bilgilendirmesi",
-      ...(nw.days || []).map((d) => `${d.date_tr || d.date} ${d.weekday || ""}: ${d.text}`)].join("\n");
+      ...(nw.days || []).map((d) => `${d.date_tr || d.date} ${d.weekday || ""}: ${d.text || NO_RELEASE}`)].join("\n");
   },
   all: () => [
     `Haftalık Dış Ticaret Bülteni · ${doc.date_tr} · Sayı: ${doc.issue}`, "",
@@ -193,6 +217,7 @@ function checklist() {
   if (!e) items.push({ id: "event", text: "Bu hafta ileri tarihli, online ve ücretsiz bir etkinlik bulunamadı. Etkinlik bölümüne elle yazın." });
   else if (!e.time) items.push({ id: "eventdate", text: "Etkinliğin saatini kayıt sayfasından ekleyin.", url: e.register_url || e.source_url, cta: "Etkinlik sayfası" });
   items.push({ id: "podcast", text: "Bu haftanın podcast görselini ve açıklamasını Podcast bölümünde güncelleyin (değiştirmezseniz son girilenler kullanılır)." });
+  if (doc.next_week?.days?.some((d) => d.unavailable)) items.push({ id: "calendar", text: "Takvim verisi alınamayan gün var; Bigpara'dan bakıp ilgili satıra yazın.", url: "https://bigpara.hurriyet.com.tr/haberler/gunluk-piyasa-takvimi/gelecek-hafta/", cta: "Bigpara" });
   for (const w of doc.warnings || []) {
     if (/korundu/.test(w)) items.push({ id: `w:${w}`, text: w.replace("bu çalıştırmada üretilemedi; önceki sürüm korundu.", "bu sabah güncellenemedi; bir önceki taslağın metni gösteriliyor.") });
   }
@@ -204,6 +229,8 @@ function noticeBox() {
   doc.checks ||= {};
   const items = checklist();
   const left = items.filter((x) => !doc.checks[x.id]).length;
+  if (isStale()) return h("div", { class: "notice" }, h("h2", {}, `Bu, ${doc.date_tr} tarihli bülten`),
+    h("p", {}, "Bu haftanın bülteni henüz hazır değil. Bu sayıyı müşterilere göndermeyin."));
   if (!left) return h("div", { class: "notice ok" }, icon("check"), "Kontroller tamam. Bülten yayına hazır.");
   return h("div", { class: "notice" },
     h("h2", {}, `Yayından önce kontrol edin (${left})`),
@@ -401,14 +428,13 @@ function newsSection(no, key, title, heading) {
 }
 
 function weekSection() {
+  normalizeWeek(doc);
   const nw = doc.next_week;
   const bigpara = "https://bigpara.hurriyet.com.tr/haberler/gunluk-piyasa-takvimi/gelecek-hafta/";
-  if (!nw) return section(8, "Gelecek Haftanın Bilgilendirmesi", null,
-    h("p", { class: "empty" }, "Takvim bu hafta hazırlanamadı. ", link(bigpara, "Bigpara takvimini açın ↗")));
   return section(8, "Gelecek Haftanın Bilgilendirmesi", T.week,
     h("table", { class: "week" }, h("tbody", {}, (nw.days || []).map((d) => h("tr", { class: d.holiday ? "holiday" : null },
       h("td", {}, h("span", { class: "d" }, (d.date_tr || d.date).replace(/ \d{4}$/, "")), h("span", { class: "w" }, d.weekday || "")),
-      h("td", {}, editable("div", d, "text")))))),
+      h("td", {}, editable("div", d, "text", { "data-ph": NO_RELEASE })))))),
     h("div", { class: "meta", style: "margin-top:10px" }, "Kaynak: ", link(bigpara, "Bigpara ekonomik takvim ↗")));
 }
 
@@ -509,14 +535,30 @@ function merge3(b, s, f) {
   return out;
 }
 
+// Eski anahtarlardaki (bulten2:tarih:üretim-saati) düzenlemeler en yenisinden taşınır
+function readSaved(date) {
+  try {
+    const cur = JSON.parse(localStorage.getItem(`bulten3:${date}`) || "null");
+    const old = Object.keys(localStorage).filter((k) => k.startsWith(`bulten2:${date}:`)).sort();
+    const moved = !cur && old.length ? JSON.parse(localStorage.getItem(old[old.length - 1]) || "null") : null;
+    if (moved) localStorage.setItem(`bulten3:${date}`, JSON.stringify(moved));
+    old.forEach((k) => localStorage.removeItem(k));
+    return cur || moved;
+  } catch { return null; }
+}
+
 async function load(date) {
   const url = date ? `data/bulletins/${date}.json` : "data/latest.json";
-  const fresh = await (await fetch(url, { cache: "no-store" })).json();
-  storeKey = `bulten2:${fresh.date}:${fresh.generated_at}`;
-  let saved = null;
-  try { saved = JSON.parse(localStorage.getItem(storeKey) || "null"); } catch {}
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`${url}: ${res.status}`);
+  const fresh = await res.json();
+  normalizeWeek(fresh);
+  // Anahtar yalnızca tarihten oluşur: geciken bir çalıştırma düzenlemeleri silmez, merge3 ile birleşir
+  storeKey = `bulten3:${fresh.date}`;
+  const saved = readSaved(fresh.date);
   base = structuredClone(fresh);  // doc düzenlendikçe base değişmesin
   doc = saved?.doc ? merge3(saved.base, saved.doc, fresh) : fresh;
+  normalizeWeek(doc);
   render();
   return fresh;
 }
@@ -556,12 +598,16 @@ async function init() {
   });
   if (!actionsUrl()) menu.querySelector('[data-act="rerun"]').hidden = true;
 
-  try {
-    const b = await load();
-    sel.value = b.date;
-  } catch {
-    app.replaceChildren(h("div", { class: "empty" }, "Henüz hazırlanmış bir bülten yok. İlk taslak cuma sabahı oluşturulacak."));
+  // Son taslak okunamazsa sıradaki tarihli bültene düşülür
+  for (const date of [undefined, ...idx.map((x) => x.date)]) {
+    try {
+      const b = await load(date);
+      sel.value = b.date;
+      if (date) toast("Son taslak okunamadı; önceki bülten gösteriliyor.");
+      return;
+    } catch {}
   }
+  app.replaceChildren(h("div", { class: "empty" }, "Bülten okunamadı. Sayfayı yenileyin; sorun sürerse çalışma kaydına bakın."));
 }
 
 init();

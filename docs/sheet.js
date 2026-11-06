@@ -9,6 +9,11 @@ const SHEET_TEXT = {
   email: "info@inovakademi.com",
 };
 
+const EVENT_FALLBACK = {
+  text: "Bu hafta için ileri tarihli, çevrim içi ve ücretsiz bir etkinlik duyurusu bulunmuyor. T.C. Ticaret Bakanlığı'nın güncel ücretsiz eğitim ve e-sohbet takvimini aşağıdaki bağlantıdan takip edebilirsiniz.",
+  url: "https://dtybs.ticaret.gov.tr/e-sohbetler/takvim/",
+};
+
 const PODCAST_KEY = "bulten:podcast";
 
 // ---- yardımcılar ----------------------------------------------------------
@@ -155,101 +160,111 @@ function fitBox(name, max, min, cls, ...body) {
 function page1(problems) {
   const w = doc.wci || {};
   const chart = w.chart_image ? h("img", { src: w.chart_image, alt: "WCI grafiği" }) : wciChart(history, w.assessment_date);
-  if (!chart) problems.push("WCI grafiği için yeterli veri yok; panelde WCI bölümünden grafik görseli yükleyin.");
-  if (!(w.paragraphs || []).length) problems.push("WCI metni boş.");
-  const cards = tradeCards();
-  for (const k of cards) if (!k.value) problems.push(`"${k.label}" kutusu boş.`);
+  const hasWci = (w.paragraphs || []).length > 0;
+  if (!hasWci) problems.push("WCI metni boş; bölüm PDF'e alınmadı.");
+  else if (!chart) problems.info.push("WCI grafiği için yeterli veri yok; metin tam genişlikte gösteriliyor.");
+  const allCards = tradeCards();
+  for (const k of allCards) if (!k.value) problems.push(`"${k.label}" kutusu boş; PDF'e alınmadı.`);
+  const cards = allCards.filter((k) => k.value);
 
   const charts = (doc.charts?.items || []).slice(0, 2);
-  if (charts.length < 2) problems.push("Grafik haberleri bölümünde iki grafik olmalı.");
+  if (charts.length < 2) problems.info.push(`Bu hafta ${charts.length} grafik haberi var; düzen buna göre ayarlandı.`);
   charts.forEach((c, i) => {
-    if (!c.image) problems.push(`${i + 1}. grafik haberinin görseli yok.`);
+    if (!c.image) problems.info.push(`${i + 1}. grafik haberinin görseli yok; metin tam genişlikte gösteriliyor.`);
     if (!(c.summary || "").trim()) problems.push(`${i + 1}. grafik haberinin metni boş.`);
   });
 
   return sheetPage(1,
-    h("section", { class: "sh-wci" },
+    hasWci ? h("section", { class: `sh-wci${charts.length ? "" : " grow"}` },
       heading("Drewry Dünya Konteyner Endeksi (WCI) (US$/40ft)"),
       h("div", { class: "sh-wci-row" },
-        fitBox("WCI metni", 10.5, 8, "sh-text", (w.paragraphs || []).map((p) => h("p", {}, p))),
-        h("figure", { class: "sh-wci-chart" },
-          h("div", { class: "sh-chart-box" }, chart || h("div", { class: "sh-missing" }, "Grafik yok")),
-          h("figcaption", { class: "sh-src" }, "Kaynak: ", pdfLink(w.source_url || "https://www.drewry.co.uk/supply-chain-advisors/supply-chain-expertise/world-container-index-assessed-by-drewry", "www.drewry.co.uk"))))),
-    h("section", { class: "sh-figs" }, cards.map((k) => h("div", { class: "sh-fig" },
+        fitBox("WCI metni", 10.5, 8, "sh-text", w.paragraphs.map((p) => h("p", {}, p))),
+        chart ? h("figure", { class: "sh-wci-chart" },
+          h("div", { class: "sh-chart-box" }, chart),
+          h("figcaption", { class: "sh-src" }, "Kaynak: ", pdfLink(w.source_url || "https://www.drewry.co.uk/supply-chain-advisors/supply-chain-expertise/world-container-index-assessed-by-drewry", "www.drewry.co.uk"))) : null)) : null,
+    cards.length ? h("section", { class: "sh-figs" }, cards.map((k) => h("div", { class: "sh-fig" },
       h("div", { class: "sh-fig-lbl" }, k.label),
-      h("div", { class: "sh-fig-val" }, k.value || "—")))),
-    h("section", { class: "sh-charts" }, [0, 1].map((i) => {
-      const c = charts[i];
-      return h("article", { class: "sh-chart" },
-        heading(c?.title || ""),
-        h("div", { class: "sh-chart-row" },
-          h("figure", { class: "sh-chart-img" },
-            c?.image ? h("img", { src: c.image, alt: "" }) : h("div", { class: "sh-missing" }, "Görsel yok"),
-            h("figcaption", { class: "sh-src" }, "Kaynak: ", pdfLink(c?.url || "https://www.visualcapitalist.com", "www.visualcapitalist.com"))),
-          fitBox(`${i + 1}. grafik haberi metni`, 10, 7.5, "sh-text", h("p", {}, c?.summary || ""))));
-    })));
+      h("div", { class: "sh-fig-val" }, k.value)))) : null,
+    charts.length ? h("section", { class: "sh-charts" }, charts.map((c, i) => h("article", { class: "sh-chart" },
+      heading(c.title || ""),
+      h("div", { class: `sh-chart-row${c.image ? "" : " noimg"}` },
+        h("figure", { class: "sh-chart-img" },
+          c.image ? h("img", { src: c.image, alt: "" }) : null,
+          h("figcaption", { class: "sh-src" }, "Kaynak: ", pdfLink(c.url || "https://www.visualcapitalist.com", "www.visualcapitalist.com"))),
+        fitBox(`${i + 1}. grafik haberi metni`, 10, 7.5, "sh-text", h("p", {}, c.summary || "")))))) : null);
+}
+
+// Haber listesi: iki gerçek sütun; haberler fitNews ile yerleştirilir
+function newsBox(name, items) {
+  const box = h("div", { class: "sh-list", "data-fit": name }, h("ul", { class: "sh-col" }), h("ul", { class: "sh-col" }));
+  box.items = items;
+  return box;
+}
+
+function newsItems(key) {
+  return (doc[key]?.items || []).filter((x) => (x.summary || "").trim());
 }
 
 function page2(problems) {
   const e = doc.event?.selected;
-  if (!e?.title) problems.push("Ücretsiz etkinlik seçilmedi.");
+  if (!e?.title) problems.info.push("Bu hafta etkinlik yok; yerine ücretsiz eğitim takvimi yönlendirmesi gösteriliyor.");
   else {
     if (!e.date) problems.push("Etkinlik tarihi boş.");
-    if (!e.time) problems.push("Etkinlik saati boş.");
+    if (!e.time) problems.info.push("Etkinlik saati yok; saat satırı PDF'te gösterilmiyor.");
   }
   const pod = podcast();
   if (!pod?.image) problems.push("Podcast görseli yüklenmedi (panelde Podcast bölümü).");
   if (!pod?.text) problems.push("Podcast açıklaması boş (panelde Podcast bölümü).");
-  const tr = (doc.tr_news?.items || []).map((x) => x.summary).filter(Boolean);
-  if (!tr.length) problems.push("Türkiye haberleri boş.");
+  const tr = newsItems("tr_news");
+  if (!tr.length) problems.push("Türkiye haberleri boş; bölüm PDF'e alınmadı.");
 
   const fact = (k, v) => v ? [h("dt", {}, k), h("dd", {}, v)] : null;
+  const fb = doc.event?.fallback || {};
   return sheetPage(2,
     h("div", { class: "sh-duo" },
       h("section", { class: "sh-event" },
         heading("Haftanın Ücretsiz Etkinlik Duyurusu"),
-        fitBox("Etkinlik metni", 10.5, 8, "sh-text", e?.title ? [
+        fitBox("Etkinlik metni", 9.5, 8, "sh-text", e?.title ? [
           h("p", { class: "sh-ev-title" }, e.title),
           h("p", {}, e.description || ""),
           h("dl", { class: "sh-facts" },
             fact("Tarih", e.date), fact("Saat", e.time),
             fact("Yer", [e.location, e.fee].filter(Boolean).join(", ")),
             fact("Kayıt", e.register_url ? pdfLink(e.register_url, shortHost(e.register_url)) : "")),
-        ] : null)),
-      h("section", { class: "sh-podcast" },
+        ] : [
+          h("p", {}, fb.text || EVENT_FALLBACK.text),
+          h("dl", { class: "sh-facts" },
+            fact("Takvim", pdfLink(fb.url || EVENT_FALLBACK.url, shortHost(fb.url || EVENT_FALLBACK.url)))),
+        ])),
+      pod?.image || pod?.text ? h("section", { class: "sh-podcast" },
         heading("İhracat Muhabbetleri Podcast"),
         // Açıklama varsa görsel sola yaslanır, metin görselin yanından ve altından akar
         pod?.text
-          ? fitBox("Podcast açıklaması", 10, 7, "sh-pod-text",
+          ? fitBox("Podcast açıklaması", 9.5, 7, "sh-pod-text",
             pod.image ? h("img", { class: "sh-pod-float", src: pod.image, alt: "" }) : null,
             pod.text.split(/\n+/).map((p) => h("p", {}, linkify(p))))
-          : h("div", { class: "sh-pod-img" }, pod?.image ? h("img", { src: pod.image, alt: "" }) : h("div", { class: "sh-missing" }, "Podcast görseli yok")))),
-    h("section", { class: "sh-news" },
+          : h("div", { class: "sh-pod-img" }, h("img", { src: pod.image, alt: "" }))) : null),
+    tr.length ? h("section", { class: "sh-news" },
       h("h2", { class: "sh-lead" }, "Türkiye ve yurt dışında bu hafta hangi gelişmeler oldu? Birlikte bir göz atalım."),
       heading("Türkiye'deki Gelişmeler"),
-      fitBox("Türkiye haberleri", 10, 7.5, "sh-list", h("ul", {}, tr.map((t) => h("li", {}, t))))));
+      newsBox("Türkiye haberleri", tr)) : null);
 }
 
 function page3(problems) {
-  const intl = (doc.intl_news?.items || []).map((x) => x.summary).filter(Boolean);
-  if (!intl.length) problems.push("Yurt dışı haberleri boş.");
+  const intl = newsItems("intl_news");
+  if (!intl.length) problems.push("Yurt dışı haberleri boş; bölüm PDF'e alınmadı.");
 
-  // Takvim: bülten tarihinden sonraki pazartesi-cumartesi; eksik gün varsa boş kutu
-  const days = doc.next_week?.days || [];
-  const base = new Date(doc.date + "T12:00:00");
-  base.setDate(base.getDate() + ((8 - base.getDay()) % 7 || 7));
-  const week = [...Array(6)].map((_, i) => {
-    const d = new Date(base); d.setDate(base.getDate() + i);
-    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    const x = days.find((y) => y.date === iso);
-    return { day: d.getDate(), month: MONTHS[d.getMonth()], weekday: DAYS[d.getDay()], text: x?.text || "" };
+  normalizeWeek(doc);
+  const week = doc.next_week.days.map((d) => {
+    const x = new Date(d.date + "T12:00:00");
+    return { day: x.getDate(), month: MONTHS[x.getMonth()], weekday: DAYS[x.getDay()], text: d.text || NO_RELEASE };
   });
-  if (week.some((d) => !d.text)) problems.push("Gelecek hafta takviminde boş gün var.");
+  if (doc.next_week.days.some((d) => d.unavailable)) problems.push("Takvim verisi alınamayan gün var; o günleri panelden kontrol edin.");
 
   return sheetPage(3,
-    h("section", { class: "sh-news" },
+    intl.length ? h("section", { class: "sh-news" },
       heading("Yurt Dışındaki Gelişmeler"),
-      fitBox("Yurt dışı haberleri", 10, 7.5, "sh-list", h("ul", {}, intl.map((t) => h("li", {}, t))))),
+      newsBox("Yurt dışı haberleri", intl)) : null,
     h("section", { class: "sh-week" },
       heading("Gelecek Haftanın Bilgilendirmesi"),
       h("div", { class: "sh-cal" }, week.map((d) => h("div", { class: "sh-day" },
@@ -269,19 +284,80 @@ function fitAll(root) {
     const max = parseFloat(el.dataset.max), min = parseFloat(el.dataset.min);
     let size = max;
     el.style.fontSize = `${size}pt`;
-    // çok sütunlu listeler taşınca yana yeni sütun açar; genişliğe de bakılır
-    const over = () => el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1;
+    const over = () => el.scrollHeight > el.clientHeight + 1;
     while (over() && size > min) {
       size = Math.round((size - 0.25) * 100) / 100;
       el.style.fontSize = `${size}pt`;
     }
     const bad = over();
     el.classList.toggle("overflow", bad);
-    if (bad) out.push(el.classList.contains("sh-list")
-      ? `${el.dataset.fit} sayfaya sığmıyor; birkaç haberi × ile çıkarın veya kısaltın.`
-      : `${el.dataset.fit} kutuya sığmıyor; metni kısaltın.`);
+    if (bad) out.push(`${el.dataset.fit} kutuya sığmıyor; metni kısaltın.`);
   }
   return out;
+}
+
+const NEWS_MAX = 10, NEWS_OK = 8.5, NEWS_MIN = 7.5;
+const MM = 96 / 25.4;
+
+// Haberleri sırayı bozmadan iki sütuna en dengeli şekilde böler; sığıyorsa true döner
+function layoutNews(box, items, size) {
+  const [a, b] = box.children;
+  box.style.fontSize = `${size}pt`;
+  a.replaceChildren(...items.map((x) => h("li", {}, x.summary)));
+  b.replaceChildren();
+  const hs = [...a.children].map((li) => li.getBoundingClientRect().height);
+  const gap = size * (96 / 72) * 0.9;
+  const col = (from, to) => hs.slice(from, to).reduce((t, v) => t + v + gap, to > from ? -gap : 0);
+  let split = hs.length, best = Infinity;
+  for (let k = 0; k <= hs.length; k++) {
+    const tall = Math.max(col(0, k), col(k, hs.length));
+    if (tall < best) { best = tall; split = k; }
+  }
+  b.append(...[...a.children].slice(split));
+  return best <= box.clientHeight - MM;
+}
+
+// İki haber bölümü aynı yazı boyutunu kullanır. En küçük boyutta da sığmayan son haber çıkarılır
+// ve adıyla raporlanır: hiçbir haber sessizce kaybolmaz.
+function fitNews(root, canDrop) {
+  const boxes = [...root.querySelectorAll(".sh-list")];
+  const dropped = [];
+  let size = NEWS_MAX;
+  for (; size >= NEWS_MIN; size = Math.round((size - 0.25) * 100) / 100) {
+    if (boxes.map((b) => layoutNews(b, b.items, size)).every(Boolean)) return { size, dropped };
+  }
+  size = NEWS_MIN;
+  for (const box of boxes) {
+    const items = [...box.items];
+    while (!layoutNews(box, items, size) && (canDrop ? items.length > 1 : false)) dropped.push(items.pop());
+  }
+  return { size, dropped };
+}
+
+// Yer kısıtlıysa etkinlik/podcast satırı daraltılıp yer haberlere bırakılır
+function fitSheet(root, problems) {
+  const duo = root.querySelector(".sh-duo");
+  if (duo) duo.style.maxHeight = "";
+  let boxes = fitAll(root);
+  let news = fitNews(root, false);
+  if (news.size < 9 && duo) {
+    duo.style.maxHeight = "64mm";
+    boxes = fitAll(root);
+  }
+  news = fitNews(root, true);
+  problems.push(...boxes);
+  for (const x of news.dropped) problems.push(`Yer kalmadı, bu haber PDF'e alınmadı: “${x.title || x.summary.slice(0, 60)}”. Panelden bir haberi çıkarın veya kısaltın.`);
+  if (root.querySelector(".sh-list") && news.size < NEWS_OK) problems.info.push(`Haberler uzun olduğu için yazı ${String(news.size).replace(".", ",")} puntoya indi; kısaltırsanız büyür.`);
+}
+
+// Açılamayan grafik görselleri kaldırılır, metin tam genişliğe geçer
+function dropBrokenImages(root, problems) {
+  for (const im of root.querySelectorAll(".sh-chart-img > img")) {
+    if (im.naturalWidth) continue;
+    im.closest(".sh-chart-row").classList.add("noimg");
+    im.remove();
+    problems.info.push("Bir grafik görseli açılamadı; metin tam genişlikte gösteriliyor.");
+  }
 }
 
 async function waitAssets(root) {
@@ -291,12 +367,21 @@ async function waitAssets(root) {
     im.complete ? null : new Promise((r) => { im.onload = im.onerror = r; setTimeout(r, 8000); })));
 }
 
+function newProblems() {
+  const p = [];
+  p.info = [];
+  if (isStale()) p.push(`Bu, ${doc.date_tr} tarihli bülten; bu haftanın bülteni henüz hazır değil.`);
+  return p;
+}
+
 async function buildSheet() {
   const root = document.getElementById("sheet");
-  const problems = [];
+  const problems = newProblems();
+  root.style.zoom = 1; // ölçüm gerçek boyutta yapılır
   root.replaceChildren(...sheetPages(problems));
   await waitAssets(root);
-  problems.push(...fitAll(root));
+  dropBrokenImages(root, problems);
+  fitSheet(root, problems);
   return problems;
 }
 
@@ -331,8 +416,11 @@ async function openPreview() {
   sheet.style.zoom = Math.min(1, (window.innerWidth - 24) / sheet.querySelector(".sh-page").offsetWidth);
   msg.replaceChildren(
     problems.length
-      ? h("div", { class: "pv-warn" }, h("b", {}, "Kaydetmeden önce bakın:"), h("ul", {}, problems.map((p) => h("li", {}, p))))
+      ? h("div", { class: "pv-warn" }, h("b", {}, "Göndermeden düzeltin:"), h("ul", {}, problems.map((p) => h("li", {}, p))))
       : h("div", { class: "pv-ok" }, icon("check"), "Eksik görünmüyor."),
+    problems.info.length
+      ? h("div", { class: "pv-info" }, h("b", {}, "Bilgi:"), h("ul", {}, problems.info.map((p) => h("li", {}, p))))
+      : null,
     h("p", { class: "pv-hint" }, "“PDF olarak kaydet”e bastığınızda açılan pencerede Hedef olarak “PDF olarak kaydet”i seçin. ",
       "Chrome veya Edge önerilir; “Üstbilgi ve altbilgi” kapalı, kenar boşlukları “Yok” olmalı."));
 }
@@ -342,12 +430,15 @@ function closePreview() {
   document.body.classList.remove("previewing");
 }
 
-// Ctrl+P ile doğrudan yazdırılırsa da güncel bülten basılsın
+// Ctrl+P ile doğrudan yazdırılırsa da güncel bülten sığdırılmış olarak basılsın
 window.addEventListener("beforeprint", () => {
-  if (!document.body.classList.contains("previewing") && doc) {
-    const root = document.getElementById("sheet");
-    const problems = [];
-    root.replaceChildren(...sheetPages(problems));
-    fitAll(root);
-  }
+  if (document.body.classList.contains("previewing") || !doc) return;
+  const ov = document.getElementById("preview"), root = document.getElementById("sheet");
+  ov.hidden = false;
+  document.body.classList.add("previewing");
+  const problems = newProblems();
+  root.style.zoom = 1;
+  root.replaceChildren(...sheetPages(problems));
+  fitSheet(root, problems);
+  window.addEventListener("afterprint", closePreview, { once: true });
 });
