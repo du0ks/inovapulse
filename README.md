@@ -1,114 +1,102 @@
-# İnovaPulse: Haftalık Dış Ticaret Bülteni otomasyonu
+# İnovaPulse
 
-Her hafta perşembeyi cumaya bağlayan gece bülten taslağını otomatik hazırlar ve web panelinde yayınlar
-(cuma 00:17 TSİ; eksik kalan bölümler 04:47 ve 07:23'te yeniden denenir, taslak 10:00'dan önce hazırdır):
+A weekly pipeline that drafts İnovakademi's foreign-trade bulletin (in Turkish) from public sources, plus a web panel where editors review the draft and export it as a PDF.
 
-| # | Bölüm | Kaynak | Nasıl |
-|---|-------|--------|-------|
-| 1 | Drewry WCI (US$/40ft) | drewry.co.uk (perşembe verisi) | Sayfa metni çekilir, Türkçe 2 paragraf özet + hat tablosu, Drewry grafikleri panelde gömülü |
-| 2 | Türkiye ihracat / ithalat | Ticaret Bakanlığı "<Ay> Ayı Dış Ticaret Verileri" haberi | Rakamlar doğrudan resmî metinden okunur (LLM yok); yıllık kutu `config.ANNUAL_EXPORTS_OVERRIDE` |
-| 3 | Grafik haberleri (2) | Visual Capitalist RSS | Ekonomi/ticaret konulu iki infografik, görsel linki + Türkçe paragraf |
-| 4 | Ücretsiz etkinlik | Ticaret Bakanlığı duyuruları ve TAGM müşavir toplantıları, UİB Akademi, İTO etkinlikleri, Tavily, Google News | Sayfalar açılır; yalnızca ileri tarihli, online, ücretsiz, tek bir etkinliğe ait (liste sayfası değil) olanlar seçilir. Link, okuyucu gibi tek denemede açılmalı; cuma sabahı tekrar denenir, açılmıyorsa başka etkinlik seçilir |
-| 5 | Türkiye'deki gelişmeler (10) | Ticaret Bakanlığı, AA, Dünya, Ekonomim, Bloomberg HT, Foreks, TRT, Hürriyet, Google News, Tavily | Tekrarlar birleştirilir; her link açılıp içerik ve tarih kontrol edilir (abonelik duvarlı, kısa veya eski haberler elenir); aynı siteden en fazla 2 haber |
-| 6 | Yurt dışı gelişmeler (10) | AA English, WTO, Google News (EN), Tavily | Aynı |
-| 7 | Gelecek hafta | Bigpara ekonomik takvim API + resmî tatiller | Kodla seçilir: o gün Türkiye açıklaması varsa o, yoksa başka ülkenin dış ticaret açıklaması, o da yoksa en önemli makro veri. Metin ülke adıyla başlar; bayram günleri otomatik yazılır |
+Panel: https://du0ks.github.io/inovapulse/
 
-Kaynak ve anahtar kelimeler `pipeline/config.py`, editoryal kurallar `pipeline/prompts.py` içinde.
+## The problem
 
-## PDF çıktısı
+İnovakademi sends exporters a weekly foreign-trade bulletin: container freight rates, Turkey's export/import figures, two infographic stories, a free training event, ten Turkish and ten international news items, and next week's economic calendar. Collecting all of that by hand means going through a dozen sites every week. This project prepares the draft overnight so that on Friday morning an editor only has to check it, fix what needs fixing and send it.
 
-Paneldeki **PDF indir** bülteni üç sayfalık A4 düzeninde (1: WCI, rakamlar, grafikler · 2: etkinlik, podcast, Türkiye haberleri · 3: yurt dışı haberleri, takvim, yasal uyarı) (`docs/sheet.js`, `docs/sheet.css`)
-önizletir; **PDF olarak kaydet** tarayıcının yazdırma penceresini açar (Chrome/Edge, Hedef: "PDF olarak
-kaydet"). Dosya adı `Inovakademi-Haftalik-Dis-Ticaret-Bulten-GG.AA.YYYY.pdf` olarak önerilir.
+## How it works
 
-- Paneldeki tüm düzenlemeler PDF'e yansır. Metin kutulara sığmazsa yazı boyutu küçülür; yine sığmazsa
-  önizlemede uyarı çıkar. Haberler iki sütuna ölçülerek dizilir; en küçük boyutta da sığmayan haber
-  çıkarılır ve önizlemede adıyla yazılır, sessizce kaybolmaz.
-- Önizleme "Göndermeden düzeltin" ile "Bilgi" uyarılarını ayırır. Boş bölüm PDF'te boş kutu bırakmaz.
-- WCI grafiği `docs/data/wci_history.json`'dan çizilir (geçmiş veri: `python -m scripts.backfill_wci`);
-  istenirse panelden Drewry grafiği görsel olarak yüklenebilir.
-- Podcast görseli ve açıklaması panelden girilir, tarayıcıda saklanır ve değiştirilene kadar her hafta kullanılır. PDF'te açıklama görselin sağında yer alır.
-- Logo: `docs/assets/globby-logo.png` (daha yüksek çözünürlüklü dosya ile değiştirilebilir).
+A GitHub Actions workflow (`.github/workflows/bulletin.yml`) runs `python -m pipeline.build` on the night from Thursday to Friday: 00:17 Turkey time, with two more runs at 04:47 and 07:23 that only retry sections that are missing or failed. The result is saved as `docs/data/bulletins/YYYY-MM-DD.json`, committed back to the repo, and `docs/` is deployed to GitHub Pages. An optional email tells the editors the draft is ready (or that the run failed).
 
-## Yedekler (kaynak düşerse)
+| Section | Sources | How |
+|---|---|---|
+| Drewry World Container Index | drewry.co.uk | Page text is parsed for the index and route rates; an LLM writes a two-paragraph Turkish summary. A figure more than ±40% away from the last value is rejected. |
+| Turkey exports / imports | Ministry of Trade monthly "Dış Ticaret Verileri" release | Figures are read directly from the official text with regexes, no LLM. Falls back to news + LLM, then to the previous bulletin. |
+| Infographic news (2) | Visual Capitalist RSS and WordPress API | Two economy/trade infographics, image link and a Turkish paragraph. Skips ones used last week. |
+| Free event | Ministry of Trade announcements, TAGM, UİB Akademi, İTO events, Google News, Tavily | Pages are opened and only future, online, free, single events (not listing pages) are kept. The registration link must open on the first try. |
+| Turkey news (10) | Ministry of Trade, AA, Dünya, Ekonomim, Bloomberg HT, Foreks, TRT Haber, Hürriyet, Google News, Tavily | Duplicates merged; every link is opened to check the content and the date (paywalled, short or old articles are dropped); at most 2 items per site. |
+| International news (10) | AA English, WTO, Google News (EN), Tavily | Same checks. |
+| Next week | Bigpara economic calendar API, Turkish public holidays (`holidays`) | Picked by code, not by the LLM: Turkey's release that day if any, otherwise another country's trade release, otherwise the most important macro release. Always Monday to Saturday. |
 
-| Bölüm | Sıra |
-|---|---|
-| Haberler | Link kontrolü → içerik eşiği 600 karakter → kalan adaylardan yeniden seçim → 14 günlük dönem → eldeki haber. LLM'lerin hepsi düşerse kaynak metinden ilk cümleler |
-| Özet uzunluğu | Haber başına en fazla 340 karakter (bu uzunlukta 10 haber en az 8,5 puntoyla sığar): LLM kısaltır, olmazsa cümle sınırından kesilir |
-| WCI | Rakam son değerden ±%40 saparsa kullanılmaz. LLM yoksa rakamlardan kalıp metin, kaynak yoksa son geçerli değerlendirme |
-| Dış ticaret | Bakanlık → haberlerden LLM → önceki bülten. Makul aralık dışındaki rakam kullanılmaz |
-| Grafikler | Son 7 gün → 30 gün; geçen hafta kullanılanlar hariç. Görsel açılmazsa metin tam genişlik |
-| Etkinlik | 75 gün → 120 gün → geçen haftanın hâlâ ileri tarihli etkinliği → eğitim takvimi yönlendirmesi |
-| Takvim | Her zaman pazartesi-cumartesi. Türkiye → dış ticaret → makro → o günün herhangi bir verisi → "Önemli bir veri açıklaması beklenmiyor." |
+The LLM does not gather news; RSS feeds and APIs do that. It is used to choose and deduplicate stories, write Turkish summaries, translate international news and write the WCI text. Every response must be valid JSON (repaired with `json-repair` if slightly broken) and must actually be in Turkish, otherwise the next model is tried. News summaries are capped at 340 characters so ten items fit on a PDF page.
 
-Yedek kullanıldığında panelin kontrol listesine ve PDF önizlemesine not düşer (`notices`). Zamanlanmış
-çalıştırma cuma 11:00'den sonra mevcut içeriğe dokunmaz, yalnızca tamamen boş bölümleri doldurur.
+Each section has fallbacks (wider date window, other candidates, last week's content, plain template text). When a fallback is used, a note is added to the draft so the editor sees it in the panel's checklist and in the PDF preview. A scheduled run that starts after 11:00 on Friday does not touch existing content; it only fills sections that are completely empty, so a late run cannot overwrite an editor's work.
 
-Testler: `python -m unittest tests.test_pipeline` (ağsız) ve
-`uvx --with playwright python tests/pdf_matrix.py` (PDF senaryoları).
+Sources, search queries and keywords live in `pipeline/config.py`; editorial rules for the LLM are in `pipeline/prompts.py`.
 
-## Mimari (ücretsiz)
+### LLM backends
 
-```
-GitHub Actions (cuma 00:17 TSİ + 2 yeniden deneme)
-  └─ python -m pipeline.build
-       ├─ toplayıcılar: RSS, Google News, Ticaret Bakanlığı, Drewry, Bigpara, (Tavily)
-       ├─ LLM: OpenRouter ücretsiz / Claude / Gemini
-       └─ docs/data/bulletins/YYYY-AA-GG.json  → repoya commit
-  └─ GitHub Pages: docs/ = panel (düzenle, kopyala, yazdır)
-  └─ (isteğe bağlı) e-posta bildirimi
-```
+`pipeline/llm.py` picks the first provider with a key, in this order, and the others act as a fallback chain:
 
-## LLM seçenekleri
+1. OpenRouter free models (`OPENROUTER_API_KEY`), several models tried in sequence
+2. Anthropic API (`ANTHROPIC_API_KEY`)
+3. Google Gemini API (`GEMINI_API_KEY`), Flash and Flash-Lite
 
-LLM haberleri toplamaz (bunu RSS/API yapar). Seçim, tekrar birleştirme, Türkçe özet, çeviri ve WCI metni için kullanılır.
+`LLM_PROVIDER` forces one. Tavily search (`TAVILY_API_KEY`) is optional but makes the event section much better.
 
-| Seçenek | Secret | Maliyet |
-|---------|--------|---------|
-| **OpenRouter ücretsiz modeller (varsayılan)** | `OPENROUTER_API_KEY` | Ücretsiz (openrouter.ai → Keys). Ücretsiz katman günde 50 istek; sistem haftada ~8 kullanır. Modeller `OPENROUTER_MODELS` değişkeniyle değiştirilebilir |
-| Claude aboneliği | `CLAUDE_CODE_OAUTH_TOKEN` | Claude Pro/Max aboneliği varsa ek ücret yok. Token: bir bilgisayarda `claude setup-token` |
-| Claude API | `ANTHROPIC_API_KEY` | Kullandıkça öde, haftada yaklaşık 0,5 $ (Opus 5.5); `ANTHROPIC_MODEL` ile değiştirilebilir |
-| Gemini | `GEMINI_API_KEY` | aistudio.google.com ücretsiz katman |
+## The editor panel
 
-Birden fazla tanımlıysa sıra: OpenRouter → Anthropic API → Claude aboneliği → Gemini. Zorlamak için repo değişkeni `LLM_PROVIDER` = `claude-cli` / `anthropic` / `gemini`.
+`docs/` is a static site (plain JavaScript, no build) that reads the JSON drafts.
 
-**Tavily** (`TAVILY_API_KEY`, tavily.com, ayda 1000 ücretsiz kredi; bu sistem ayda yaklaşık 60 kullanır): isteğe bağlı ama özellikle **etkinlik** bölümünün kalitesini çok artırır.
+- Pick a bulletin from the archive dropdown. Click any text to edit it. Edits are saved in the browser's localStorage, so they are per person and per browser.
+- Remove news items, reorder them with the arrows, or add one from the list of suggested extra stories.
+- A checklist at the top lists what still needs attention before sending (fallbacks used, missing calendar days, and so on).
+- Copy one section or the whole bulletin as text for Canva.
+- Upload a Drewry chart image or replace an infographic image. The podcast image and description are entered once and reused every week until changed.
+- **PDF indir** opens a three-page A4 preview (`docs/sheet.js`, `docs/sheet.css`): page 1 WCI, trade figures and infographics; page 2 the event, podcast and Turkey news; page 3 international news, calendar and legal notice. Text shrinks to fit its box; news is laid out in two measured columns; anything that still doesn't fit is listed by name in the preview instead of being dropped silently. Saving uses the browser's print dialog ("Save as PDF").
+- The WCI chart in the PDF is drawn from `docs/data/wci_history.json`. `python -m scripts.backfill_wci` fills about a year of history from the Wayback Machine.
+- "Taslağı yeniden oluştur" links to the Actions page to rerun the workflow.
 
-## Kurulum
+## Tech stack
 
-1. Bu klasörü GitHub'a gönderin (ör. `inovakademi/inovapulse`).
-2. **Settings → Secrets and variables → Actions**: yukarıdaki secret'lardan en az birini ekleyin (+ isteğe bağlı `TAVILY_API_KEY`).
-3. **Settings → Pages → Source: GitHub Actions**.
-4. **Actions → Haftalık bülten → Run workflow** ile ilk çalıştırma. Panel: `https://<kullanıcı>.github.io/<repo>/`
-5. (İsteğe bağlı) E-posta bildirimi: değişken `NOTIFY_EMAIL`, secret `SMTP_USERNAME`, `SMTP_PASSWORD` (Gmail uygulama şifresi).
+- Python 3.12: `requests`, `feedparser`, `trafilatura` (article text), `holidays`, `json-repair`, `anthropic`
+- LLMs: OpenRouter, Anthropic API, Gemini
+- GitHub Actions (schedule, commit, Pages deploy, email via `dawidd6/action-send-mail`)
+- Vanilla JavaScript and CSS for the panel and the print layout
+- Playwright for the PDF layout tests
 
-> GitHub Pages ücretsiz planda yalnızca **public** repoda çalışır. Panel herkese açık bir URL olur (arama motorlarına kapalı). Gizli olması gerekirse repo private yapılıp `docs/` klasörü Cloudflare Pages'e (ücretsiz, Access ile şifrelenebilir) veya şirket sunucusuna konabilir.
-
-## Yerelde çalıştırma
+## Running it locally
 
 ```bash
 uv venv .venv && uv pip install --python .venv/bin/python -r requirements.txt
-cp .env.example .env                            # anahtarları yazın
-.venv/bin/python -m pipeline.build              # bugünün bülteni
-.venv/bin/python -m pipeline.build --no-llm     # sadece veri toplama
-python3 -m http.server -d docs 8000             # panel: http://localhost:8000
+cp .env.example .env                            # add OPENROUTER_API_KEY and optionally TAVILY_API_KEY
+.venv/bin/python -m pipeline.build              # today's bulletin
+.venv/bin/python -m pipeline.build --no-llm     # collect data only, no LLM calls
+python3 -m http.server -d docs 8000             # panel at http://localhost:8000
 ```
 
-## Şirket sunucusunda çalıştırma
+Other flags: `--date YYYY-MM-DD`, `--fill-missing` (keep the existing draft, redo only missing sections), `--scheduled`.
 
-GitHub yerine bir Linux sunucuda: repoyu klonlayın, crontab'a ekleyin ve `docs/` klasörünü nginx ile sunun:
+The workflow can also be started by hand from the Actions tab with a date, fill-missing, dry-run (draft uploaded as an artifact, nothing published) or deploy-only.
+
+## Tests
+
+```bash
+python -m unittest tests.test_pipeline           # fallback behaviour with fake sources, no network
+uvx --with playwright python tests/pdf_matrix.py # PDF layout scenarios in a headless browser
+```
+
+## Project structure
 
 ```
-15 9 * * 5  cd /opt/inovapulse && .venv/bin/python -m pipeline.build >> build.log 2>&1
+pipeline/
+  build.py     builds each section, fallbacks, link and date checks, saving
+  sources.py   RSS, Google News, Tavily, Drewry, Bigpara, Ministry of Trade, event sites
+  llm.py       provider selection and fallback chain, JSON parsing, Turkish check
+  prompts.py   editorial rules
+  config.py    sources, queries, models, settings
+docs/          editor panel and PDF layout (GitHub Pages); data/ holds the generated drafts
+scripts/       backfill_wci.py
+tests/         unit tests and PDF layout tests
 ```
 
-## Panel
+## Limitations
 
-- Metinlere tıklayıp düzenleyin. Düzenlemeler tarayıcıda saklanır (kişiye özel).
-- Haber kutucuğuyla çıkarın, ↑↓ ile sıralayın, yedeklerden "+" ile ekleyin.
-- Bölüm bazında veya "Tümünü kopyala" ile Canva'ya yapıştırın; "Yazdır / PDF" sade bir çıktı verir.
-- "Tüm aday haberler" bölümünde sistemin taradığı her şey aranabilir.
-
-Önceki iki sayfalık tasarımın yedeği: `yedek-2sayfa` dalı ve `yedek-2sayfa-2026-11-01` etiketi
-(geri dönmek için: `git checkout yedek-2sayfa -- docs/sheet.js docs/sheet.css`).
+- Edits made in the panel live only in that browser. Two editors don't see each other's changes, and clearing site data loses them.
+- The panel is a public URL (marked `noindex`), because GitHub Pages on a free plan needs a public repo.
+- Sources are scraped from HTML in several places (Drewry, ministry pages, event sites), so a site redesign can break a section until the parser is updated. The fallbacks keep the draft complete in the meantime.
+- The issue number is counted from a fixed anchor in `config.py` and has to be adjusted by hand if a week is skipped.
