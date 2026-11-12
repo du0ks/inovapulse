@@ -29,12 +29,15 @@ POD = ("#142 Ukrayna ile Yeni Ticaret Dönemi ve Fırsatlar\nTürkiye - Ukrayna 
        "Spotify'da dinlemek için tıklayınız.\nhttps://open.spotify.com/episode/5YvXq9ZtEw1abcDEF?si=_ZhvCJk3SnO")
 FILL = "(s) => { for (const k of ['tr_news','intl_news']) doc[k].items = doc[k].items.slice(0,10).map(x => ({...x, summary: s})); }"
 
-# (ad, doc'u değiştiren JS, argüman, beklenen en küçük punto, gizlenmesine izin var mı)
+MANY = "() => { for (const k of ['tr_news','intl_news']) doc[k].items = [...doc[k].items, ...doc[k].reserve, ...doc[k].items].slice(0, 18); }"
+
+# (ad, doc'u değiştiren JS, argüman, beklenen sayfa sayısı ya da None)
 CASES = [
     ("gercek-6-kasim", None, None, None),
-    ("butce-siniri", FILL, BUDGET, 8.5),
+    ("butce-siniri", FILL, BUDGET, None),
     ("azami-uzunluk", FILL, LONG, None),
-    ("1-haber", "() => { doc.tr_news.items = doc.tr_news.items.slice(0,1); doc.intl_news.items = doc.intl_news.items.slice(0,1); }", None, 8.5),
+    ("18-haber", MANY, None, None),
+    ("1-haber", "() => { doc.tr_news.items = doc.tr_news.items.slice(0,1); doc.intl_news.items = doc.intl_news.items.slice(0,1); }", None, None),
     ("haber-yok", "() => { doc.tr_news.items = []; doc.intl_news = null; }", None, None),
     ("etkinlik-yok", "() => { doc.event = {selected:null, alternatives:[]}; }", None, None),
     ("saat-yok", "() => { doc.event.selected.time = null; }", None, None),
@@ -49,13 +52,15 @@ CASES = [
 ]
 
 MEASURE = """() => {
-  const out = {boxes: [], clipped: [], bodies: [], days: document.querySelectorAll('.sh-day').length};
-  for (const box of document.querySelectorAll('.sh-list')) {
-    const r = box.getBoundingClientRect();
-    const lis = [...box.querySelectorAll('li')];
-    out.boxes.push({name: box.dataset.fit, font: parseFloat(box.style.fontSize), expected: box.items.length, shown: lis.length,
-      outside: lis.filter(l => { const b = l.getBoundingClientRect(); return b.bottom > r.bottom + 1 || b.right > r.right + 1; }).length});
-  }
+  const out = {clipped: [], bodies: [], days: document.querySelectorAll('.sh-day').length};
+  const lis = [...document.querySelectorAll('.sh-list li')];
+  out.expected = newsItems('tr_news').length + newsItems('intl_news').length;
+  out.shown = lis.length;
+  out.fonts = [...new Set(lis.map(l => getComputedStyle(l).fontSize))];
+  out.outside = lis.filter(l => { const body = l.closest('.sh-body'); const b = l.getBoundingClientRect(), r = body.getBoundingClientRect();
+    return b.bottom > r.bottom - parseFloat(getComputedStyle(body).paddingBottom) + 1 || b.right > r.right + 1; }).length;
+  out.pages = [...document.querySelectorAll('.sh-pno')].map(x => x.textContent);
+  out.discLast = !!document.querySelector('.sh-page:last-child .sh-disc');
   for (const el of document.querySelectorAll('.fit')) if (el.scrollHeight > el.clientHeight + 1) out.clipped.push(el.dataset.fit);
   for (const b of document.querySelectorAll('.sh-body')) out.bodies.push(b.scrollHeight - b.clientHeight);
   out.warn = [...document.querySelectorAll('.pv-warn li')].map(x => x.textContent);
@@ -77,7 +82,7 @@ def main():
     fails = 0
     with sync_playwright() as p:
         b = p.chromium.launch(executable_path=os.environ.get("CHROME") or None)
-        for name, js, arg, min_font in CASES:
+        for name, js, arg, want_pages in CASES:
             for width in ([1300, 800, 1920] if name == "gercek-6-kasim" else [1300]):
                 pg = b.new_page(viewport={"width": width, "height": 1000})
                 errs = []
@@ -101,17 +106,20 @@ def main():
                 pdf = pg.pdf(prefer_css_page_size=True, print_background=True)
                 pages = len(re.findall(rb"/Type\s*/Page[^s]", pdf))
                 bad = []
-                if pages != 3:
-                    bad.append(f"{pages} sayfa")
+                if pages != len(m["pages"]) or (want_pages and pages != want_pages):
+                    bad.append(f"{pages} sayfa (numaralar {m['pages']})")
+                if m["pages"] and m["pages"][-1] != f"{pages} / {pages}":
+                    bad.append(f"sayfa numarası {m['pages'][-1]}")
                 if errs:
                     bad.append(f"JS hatası: {errs[0][:120]}")
-                for x in m["boxes"]:
-                    if x["outside"]:
-                        bad.append(f"{x['name']}: {x['outside']} haber kutu dışında")
-                    if x["shown"] != x["expected"] and not any("PDF'e alınmadı" in w for w in m["warn"]):
-                        bad.append(f"{x['name']}: {x['expected'] - x['shown']} haber sessizce kayboldu")
-                    if min_font and x["font"] < min_font:
-                        bad.append(f"{x['name']}: {x['font']}pt < {min_font}pt")
+                if m["outside"]:
+                    bad.append(f"{m['outside']} haber sayfa dışında")
+                if m["shown"] != m["expected"]:
+                    bad.append(f"{m['expected']} haberden {m['shown']} tanesi PDF'te")
+                if m["fonts"] and m["fonts"] != ["13.3333px"]:
+                    bad.append(f"haber yazısı {m['fonts']}")
+                if not m["discLast"]:
+                    bad.append("yasal uyarı son sayfada değil")
                 if any(v > 1 for v in m["bodies"]):
                     bad.append(f"sayfa gövdesi taşıyor: {m['bodies']}")
                 if m["clipped"] and not any("sığmıyor" in w for w in m["warn"]):
@@ -119,8 +127,7 @@ def main():
                 if m["days"] != 6:
                     bad.append(f"takvim {m['days']} gün")
                 fails += bool(bad)
-                fonts = "/".join(str(x["font"]) for x in m["boxes"])
-                print(f"{'HATA' if bad else 'ok  '} {name}@{width}: {pages}s font={fonts} gövde={m['bodies']} {'; '.join(bad)}")
+                print(f"{'HATA' if bad else 'ok  '} {name}@{width}: {pages}s haber={m['shown']}/{m['expected']} gövde={m['bodies']} {'; '.join(bad)}")
                 extra = [w for w in m["warn"] if "Podcast" not in w]
                 if extra:
                     print("      uyarı:", " | ".join(extra)[:300])

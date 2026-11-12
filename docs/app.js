@@ -404,6 +404,14 @@ function podcastSection(no) {
         }))));
 }
 
+// Açılır listeler (ör. önerilen haberler) sayfa yeniden çizilince kapanmasın
+const openLists = new Set();
+function keepOpen(id, el) {
+  if (openLists.has(id)) el.open = true;
+  el.addEventListener("toggle", () => { el.open ? openLists.add(id) : openLists.delete(id); });
+  return el;
+}
+
 function newsSection(no, key, title, heading) {
   const sec = doc[key];
   if (!sec) return section(no, title, null, h("p", { class: "empty" }, "Bu bölüm bu hafta hazırlanamadı."));
@@ -421,11 +429,11 @@ function newsSection(no, key, title, heading) {
         h("button", { class: "tool", type: "button", title: "Yukarı taşı", disabled: i === 0, onclick: () => move(i, -1) }, icon("up")),
         h("button", { class: "tool", type: "button", title: "Aşağı taşı", disabled: i === sec.items.length - 1, onclick: () => move(i, 1) }, icon("down")),
         h("button", { class: "tool rm", type: "button", title: "Bültenden çıkar", onclick: () => remove(i) }, icon("x")))))),
-    sec.reserve.length ? h("details", { class: "more" },
+    sec.reserve.length ? keepOpen(`more:${key}`, h("details", { class: "more" },
       h("summary", {}, icon("chevron"), `Önerilen diğer haberler (${sec.reserve.length})`),
       h("ul", {}, sec.reserve.map((x, i) => h("li", {},
         h("div", {}, h("div", {}, x.title), h("div", { class: "src" }, link(x.url, sourceName(x)), x.published ? ` · ${shortDate(x.published)}` : "")),
-        h("button", { class: "btn small", type: "button", onclick: () => add(i) }, icon("plus"), "Ekle"))))) : null);
+        h("button", { class: "btn small", type: "button", onclick: () => add(i) }, icon("plus"), "Ekle")))))) : null);
 }
 
 function weekSection() {
@@ -494,7 +502,7 @@ const ACTIONS = {
     h("li", {}, "Üstteki sarı kutudaki maddeleri kontrol edip işaretleyin."),
     h("li", {}, "Değiştirmek istediğiniz metne tıklayıp yazın. Haberleri oklarla sıralayabilir, × ile çıkarabilir, “Önerilen diğer haberler”den ekleyebilirsiniz."),
     h("li", {}, "Podcast bölümünden haftanın podcast görselini yükleyin."),
-    h("li", {}, "“PDF indir” bülteni üç sayfalık A4 düzeninde gösterir; eksik ya da taşan bir şey varsa üstte yazar. “PDF olarak kaydet” ile indirin."),
+    h("li", {}, "“PDF indir” bülteni A4 sayfalar halinde gösterir (seçtiğiniz bütün haberler yer alır, sayfa sayısı haber sayısına göre değişir); eksik ya da taşan bir şey varsa üstte yazar. “PDF olarak kaydet” ile indirin."),
     h("li", {}, "Canva'da çalışmak isterseniz “Bülteni kopyala” ile metni alıp yapıştırabilirsiniz."))),
   rerun: () => {
     const url = actionsUrl();

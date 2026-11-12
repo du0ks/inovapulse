@@ -22,7 +22,7 @@ A GitHub Actions workflow (`.github/workflows/bulletin.yml`) runs `python -m pip
 | International news (10) | AA English, WTO, Google News (EN), Tavily | Same checks. |
 | Next week | Bigpara economic calendar API, Turkish public holidays (`holidays`) | Picked by code, not by the LLM: Turkey's release that day if any, otherwise another country's trade release, otherwise the most important macro release. Always Monday to Saturday. |
 
-The LLM does not gather news; RSS feeds and APIs do that. It is used to choose and deduplicate stories, write Turkish summaries, translate international news and write the WCI text. Every response must be valid JSON (repaired with `json-repair` if slightly broken) and must actually be in Turkish, otherwise the next model is tried. News summaries are capped at 340 characters so ten items fit on a PDF page.
+The LLM does not gather news; RSS feeds and APIs do that. It is used to choose and deduplicate stories, write Turkish summaries, translate international news and write the WCI text. Every response must be valid JSON (repaired with `json-repair` if slightly broken) and must actually be in Turkish, otherwise the next model is tried. News summaries are capped at 340 characters to keep them short and readable.
 
 Each section has fallbacks (wider date window, other candidates, last week's content, plain template text). When a fallback is used, a note is added to the draft so the editor sees it in the panel's checklist and in the PDF preview. A scheduled run that starts after 11:00 on Friday does not touch existing content; it only fills sections that are completely empty, so a late run cannot overwrite an editor's work.
 
@@ -47,7 +47,7 @@ Sources, search queries and keywords live in `pipeline/config.py`; editorial rul
 - A checklist at the top lists what still needs attention before sending (fallbacks used, missing calendar days, and so on).
 - Copy one section or the whole bulletin as text for Canva.
 - Upload a Drewry chart image or replace an infographic image. The podcast image and description are entered once and reused every week until changed.
-- **PDF indir** opens a three-page A4 preview (`docs/sheet.js`, `docs/sheet.css`): page 1 WCI, trade figures and infographics; page 2 the event, podcast and Turkey news; page 3 international news, calendar and legal notice. Text shrinks to fit its box; news is laid out in two measured columns; anything that still doesn't fit is listed by name in the preview instead of being dropped silently. Saving uses the browser's print dialog ("Save as PDF").
+- **PDF indir** opens an A4 preview (`docs/sheet.js`, `docs/sheet.css`). Page 1 is fixed (WCI, trade figures, infographics). After it, the event and podcast, Turkey news, international news, calendar and legal notice flow onto as many pages as they need: every selected news item is printed at 10 pt in two columns, and a section that doesn't fit continues on the next page. The legal notice sits at the bottom of the last page. Small boxes (event, podcast, calendar) still shrink their text to fit and are named in the preview if they can't. Saving uses the browser's print dialog ("Save as PDF").
 - The WCI chart in the PDF is drawn from `docs/data/wci_history.json`. `python -m scripts.backfill_wci` fills about a year of history from the Wayback Machine.
 - "Taslağı yeniden oluştur" links to the Actions page to rerun the workflow.
 
