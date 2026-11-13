@@ -193,5 +193,32 @@
     "change_pct": 0
    }
   ]
+ },
+ {
+  "date": "2026-11-12",
+  "composite": 4305.0,
+  "change_pct": -2.0,
+  "routes": [
+   {
+    "route": "Şanghay–New York",
+    "usd_40ft": 9020,
+    "change_pct": -3
+   },
+   {
+    "route": "Şanghay–Los Angeles",
+    "usd_40ft": 7416,
+    "change_pct": -2
+   },
+   {
+    "route": "Şanghay–Rotterdam",
+    "usd_40ft": 3504,
+    "change_pct": -3
+   },
+   {
+    "route": "Şanghay–Cenova",
+    "usd_40ft": 4168,
+    "change_pct": 0
+   }
+  ]
  }
 ]
