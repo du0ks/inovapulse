@@ -369,9 +369,28 @@ function paginate(root, blocks) {
   }
 }
 
+// Sıkılık kademeleri: yazı hep 10 punto; yalnızca haber arası, satır aralığı ve bölüm aralığı daralır
+const DENSITY = [
+  { "--news-gap": "1.5em", "--news-lh": "1.5", "--flow-gap": "6.5mm" },
+  { "--news-gap": "1.1em", "--news-lh": "1.45", "--flow-gap": "5mm" },
+  { "--news-gap": ".8em", "--news-lh": "1.4", "--flow-gap": "4mm" },
+];
+
+function paginateAt(root, blocks, level) {
+  for (const [k, v] of Object.entries(DENSITY[level])) root.style.setProperty(k, v);
+  while (root.children.length > 1) root.lastElementChild.remove();
+  paginate(root, blocks);
+  return root.children.length;
+}
+
+// Önce rahat aralıkla dizer. Daha sıkı bir kademe sayfa sayısını azaltıyorsa (ör. sona yalnız takvim ve
+// yasal uyarı kalıyorsa) bunu sağlayan en rahat kademe kullanılır; azaltmıyorsa rahat aralıkta kalınır.
 function layoutSheet(root, blocks, problems) {
   fitAll(root.firstElementChild);
-  paginate(root, blocks);
+  const base = paginateAt(root, blocks, 0);
+  let chosen = 0;
+  for (let i = 1; i < DENSITY.length && !chosen; i++) if (paginateAt(root, blocks, i) < base) chosen = i;
+  if (!chosen) paginateAt(root, blocks, 0); // döngü en sıkı kademede bitti; rahat dizilime dön
   problems.push(...fitAll(root));
   const pages = root.querySelectorAll(".sh-page");
   pages.forEach((p, i) => { p.querySelector(".sh-pno").textContent = `${i + 1} / ${pages.length}`; });

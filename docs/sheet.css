@@ -1,6 +1,8 @@
 /* PDF çıktısı: A4 bülten; 1. sayfa sabit, sonrası içeriğe göre akar. Ölçüler mm. */
 
-#sheet { display: none; }
+#sheet { display: none; --news-gap: 1.5em; --news-lh: 1.5; --flow-gap: 6.5mm; }
+/* 1. sayfadan sonraki sayfalarda bölüm aralığı sıkılık kademesine göre değişir */
+.sh-page + .sh-page .sh-body { gap: var(--flow-gap); }
 .sh-page {
   --navy: #003f6b; --blue: #004aac; --ink: #1c1f24; --muted: #5d6673; --rule: #d3dae2; --tint: #eef3f8;
   --cal-h: #a6d9d9; --cal-b: #e3f3f3;
@@ -97,10 +99,10 @@
 
 /* haberler: iki sütun, sabit 10 punto; sığmayan haber sonraki sayfaya geçer */
 .sh-news { flex: none !important; }
-.sh-list { display: flex; gap: 9mm; font-size: 10pt; line-height: 1.5; }
+.sh-list { display: flex; gap: 9mm; font-size: 10pt; line-height: var(--news-lh); }
 .sh-col { flex: 1 1 0; min-width: 0; margin: 0; padding: 0; list-style: none; }
 /* dar sütunda iki yana yaslama kelime aralarını açıyor; sola yaslı */
-.sh-list li { position: relative; padding-left: 4mm; margin-bottom: 1.5em; text-align: left; overflow-wrap: anywhere; }
+.sh-list li { position: relative; padding-left: 4mm; margin-bottom: var(--news-gap); text-align: left; overflow-wrap: anywhere; }
 .sh-list li > .sh-a { text-decoration: none; }
 .sh-news-src { font-size: 8pt; color: var(--blue); white-space: nowrap; }
 .sh-news-src .sh-a { text-decoration: none; }
@@ -115,8 +117,8 @@
 .sh-day-h span { font-size: 8pt; }
 .sh-day-b { flex: 1; background: var(--cal-b); padding: 2mm; font-weight: 700; line-height: 1.3; }
 
-/* yasal uyarı: son sayfanın en altında */
-.sh-disc { flex: none !important; margin-top: auto; padding: 3mm 4mm; border: .3mm solid var(--rule); border-radius: 1.5mm; color: var(--muted); }
+/* yasal uyarı: takvimin hemen altında */
+.sh-disc { flex: none !important; padding: 3mm 4mm; border: .3mm solid var(--rule); border-radius: 1.5mm; color: var(--muted); }
 .sh-disc h4 { font-size: 7.4pt; font-weight: 700; color: var(--navy); letter-spacing: .03em; margin-bottom: 1mm; }
 .sh-disc p { font-size: 6.6pt; line-height: 1.35; text-align: justify; hyphens: auto; }
 

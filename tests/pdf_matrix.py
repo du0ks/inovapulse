@@ -60,6 +60,9 @@ MEASURE = """() => {
   out.outside = lis.filter(l => { const body = l.closest('.sh-body'); const b = l.getBoundingClientRect(), r = body.getBoundingClientRect();
     return b.bottom > r.bottom - parseFloat(getComputedStyle(body).paddingBottom) + 1 || b.right > r.right + 1; }).length;
   out.pages = [...document.querySelectorAll('.sh-pno')].map(x => x.textContent);
+  out.density = getComputedStyle(document.getElementById("sheet")).getPropertyValue("--news-gap");
+  const disc = document.querySelector('.sh-disc');
+  out.discAfterWeek = !!disc && (!document.querySelector('.sh-week') || disc.previousElementSibling?.matches('.sh-week'));
   out.discLast = !!document.querySelector('.sh-page:last-child .sh-disc');
   for (const el of document.querySelectorAll('.fit')) if (el.scrollHeight > el.clientHeight + 1) out.clipped.push(el.dataset.fit);
   for (const b of document.querySelectorAll('.sh-body')) out.bodies.push(b.scrollHeight - b.clientHeight);
@@ -118,6 +121,8 @@ def main():
                     bad.append(f"{m['expected']} haberden {m['shown']} tanesi PDF'te")
                 if m["fonts"] and m["fonts"] != ["13.3333px"]:
                     bad.append(f"haber yazısı {m['fonts']}")
+                if not m["discAfterWeek"]:
+                    bad.append("yasal uyarı takvimin altında değil")
                 if not m["discLast"]:
                     bad.append("yasal uyarı son sayfada değil")
                 if any(v > 1 for v in m["bodies"]):
@@ -127,7 +132,7 @@ def main():
                 if m["days"] != 6:
                     bad.append(f"takvim {m['days']} gün")
                 fails += bool(bad)
-                print(f"{'HATA' if bad else 'ok  '} {name}@{width}: {pages}s haber={m['shown']}/{m['expected']} gövde={m['bodies']} {'; '.join(bad)}")
+                print(f"{'HATA' if bad else 'ok  '} {name}@{width}: {pages}s haber={m['shown']}/{m['expected']} gövde={m['bodies']} aralık={m['density']} {'; '.join(bad)}")
                 extra = [w for w in m["warn"] if "Podcast" not in w]
                 if extra:
                     print("      uyarı:", " | ".join(extra)[:300])
