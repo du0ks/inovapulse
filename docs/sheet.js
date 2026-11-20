@@ -304,9 +304,17 @@ function splitCols(hs, gap) {
 
 // Listeye sayfada kalan yere sığan en çok haberi yerleştirir, kaç tane olduğunu döndürür.
 // force: boş sayfadaysa en az bir haber konur.
+// Haber metni ve sonundaki kaynak adı haberin bağlantısıdır (PDF'te tıklanabilir)
+function newsLi(x) {
+  const url = /^https?:\/\//.test(x.url || "") ? x.url : null;
+  if (!url) return h("li", {}, x.summary);
+  return h("li", {}, pdfLink(url, x.summary), " ",
+    h("span", { class: "sh-news-src" }, pdfLink(url, `${sourceName(x)} ↗`)));
+}
+
 function fillNews(list, items, body, force) {
   const [a, b] = list.children;
-  a.replaceChildren(...items.map((x) => h("li", {}, x.summary)));
+  a.replaceChildren(...items.map(newsLi));
   b.replaceChildren();
   const lis = [...a.children];
   const hs = lis.map((li) => li.getBoundingClientRect().height);

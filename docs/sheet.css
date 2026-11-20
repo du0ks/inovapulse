@@ -101,6 +101,9 @@
 .sh-col { flex: 1 1 0; min-width: 0; margin: 0; padding: 0; list-style: none; }
 /* dar sütunda iki yana yaslama kelime aralarını açıyor; sola yaslı */
 .sh-list li { position: relative; padding-left: 4mm; margin-bottom: 1.5em; text-align: left; overflow-wrap: anywhere; }
+.sh-list li > .sh-a { text-decoration: none; }
+.sh-news-src { font-size: 8pt; color: var(--blue); white-space: nowrap; }
+.sh-news-src .sh-a { text-decoration: none; }
 .sh-list li:last-child { margin-bottom: 0; }
 .sh-list li::before { content: ""; position: absolute; left: 0; top: .52em; width: 1.5mm; height: 1.5mm; background: var(--navy); }
 
