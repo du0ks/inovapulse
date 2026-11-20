@@ -215,7 +215,7 @@ function flowBlocks(problems) {
   normalizeWeek(doc);
   const week = doc.next_week.days.map((d) => {
     const x = new Date(d.date + "T12:00:00");
-    return { day: x.getDate(), month: MONTHS[x.getMonth()], weekday: DAYS[x.getDay()], text: d.text || NO_RELEASE };
+    return { day: x.getDate(), month: MONTHS[x.getMonth()], year: x.getFullYear(), weekday: DAYS[x.getDay()], text: d.text || NO_RELEASE };
   });
   if (doc.next_week.days.some((d) => d.unavailable)) problems.push("Takvim verisi alınamayan gün var; o günleri panelden kontrol edin.");
 
@@ -251,7 +251,7 @@ function flowBlocks(problems) {
     h("section", { class: "sh-week" },
       heading("Gelecek Haftanın Bilgilendirmesi"),
       h("div", { class: "sh-cal" }, week.map((d) => h("div", { class: "sh-day" },
-        h("div", { class: "sh-day-h" }, h("b", {}, `${d.day} ${d.month}`), h("span", {}, d.weekday)),
+        h("div", { class: "sh-day-h" }, h("b", {}, `${d.day} ${d.month} ${d.year}`), h("span", {}, d.weekday)),
         fitBox(`Takvim (${d.weekday})`, 8.5, 6.5, "sh-day-b", d.text))))),
     h("section", { class: "sh-disc" },
       h("h4", {}, SHEET_TEXT.disclaimerTitle),

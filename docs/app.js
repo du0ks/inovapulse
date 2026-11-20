@@ -442,7 +442,7 @@ function weekSection() {
   const bigpara = "https://bigpara.hurriyet.com.tr/haberler/gunluk-piyasa-takvimi/gelecek-hafta/";
   return section(8, "Gelecek Haftanın Bilgilendirmesi", T.week,
     h("table", { class: "week" }, h("tbody", {}, (nw.days || []).map((d) => h("tr", { class: d.holiday ? "holiday" : null },
-      h("td", {}, h("span", { class: "d" }, (d.date_tr || d.date).replace(/ \d{4}$/, "")), h("span", { class: "w" }, d.weekday || "")),
+      h("td", {}, h("span", { class: "d" }, d.date_tr || d.date), h("span", { class: "w" }, d.weekday || "")),
       h("td", {}, editable("div", d, "text", { "data-ph": NO_RELEASE })))))),
     h("div", { class: "meta", style: "margin-top:10px" }, "Kaynak: ", link(bigpara, "Bigpara ekonomik takvim ↗")));
 }
